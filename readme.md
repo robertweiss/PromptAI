@@ -11,7 +11,7 @@ PromptAI is a Processwire CMS module that utilizes AI to process text fields upo
 
 ## Installation
 
-1. Download and install PromptAI.
+1. Download and install [PromptAI](https://github.com/robertweiss/PromptAI).
 2. Configure the module settings.
 3. Open a page, click on the arrow next to the save-button, and select ›Save + send to AI‹.
 
