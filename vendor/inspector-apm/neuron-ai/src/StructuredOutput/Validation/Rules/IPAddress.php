@@ -1,0 +1,16 @@
+<?php
+
+namespace NeuronAI\StructuredOutput\Validation\Rules;
+
+#[\Attribute(\Attribute::TARGET_PROPERTY | \Attribute::IS_REPEATABLE)]
+class IPAddress extends AbstractValidationRule
+{
+    protected string $message = '{name} must be a valid IP address';
+
+    public function validate(string $name, mixed $value, array &$violations)
+    {
+        if (filter_var($value, FILTER_VALIDATE_IP) === false) {
+            $violations[] = $this->buildMessage($name, $this->message);
+        }
+    }
+}
