@@ -5,6 +5,7 @@ class PromptMatrixEntity {
     public ?string $sourceField;
     public ?string $targetField;
     public ?string $prompt;
+    public ?string $label;
 }
 
 class PromptAIConfig extends ModuleConfig {

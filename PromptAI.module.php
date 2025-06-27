@@ -1,6 +1,7 @@
 <?php namespace ProcessWire;
 
 require_once __DIR__.'/PromptAIAgent.php';
+require_once __DIR__.'/PromptAIConfigForm.php';
 
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Chat\Messages\AssistantMessage;
@@ -33,6 +34,18 @@ class PromptAI extends Process implements Module {
     private array $fileFieldTypes = [
         'ProcessWire\FieldtypeImage',
     ];
+
+    public function ___execute() {
+        $configForm = new PromptAIConfigForm();
+        
+        // Handle form submission
+        if(wire('input')->post('submit_prompt_config')) {
+            $configForm->processSubmission();
+            $this->session->redirect($this->page->url);
+        }
+        
+        return $configForm->render();
+    }
 
     public function init() {
         if ($this->initSettings()) {
@@ -262,7 +275,7 @@ class PromptAI extends Process implements Module {
         }
     }
 
-    public function parsePromptMatrix(string $promptMatrixString, $showErrors = false) {
+    public function parsePromptMatrix(string $promptMatrixString, $showErrors = false): array {
         $promptMatrix = [];
         $promptMatrixRows = array_filter(array_map('trim', explode("\n", $promptMatrixString)));
         $c = 0;
@@ -274,6 +287,7 @@ class PromptAI extends Process implements Module {
             $promptMatrixEntity->sourceField = $promptMatrixRow[1] ?? null;
             $promptMatrixEntity->targetField = $promptMatrixRow[2] ?? null;
             $promptMatrixEntity->prompt = $promptMatrixRow[3] ?? null;
+            $promptMatrixEntity->label = $promptMatrixRow[4] ?? null;
 
             // Is source field set?
             if (!$promptMatrixEntity->sourceField) {
@@ -326,7 +340,7 @@ class PromptAI extends Process implements Module {
         return $promptMatrix;
     }
 
-    private function getFieldOptions() {
+    public function getFieldOptions() {
         $fieldsOptions = [];
         if (wire('fields')) {
             foreach (wire('fields') as $field) {
@@ -344,7 +358,7 @@ class PromptAI extends Process implements Module {
         return $fieldsOptions;
     }
 
-    private function getTemplateOptions() {
+    public function getTemplateOptions() {
         $templatesOptions = [];
         if (wire('templates')) {
             foreach (wire('templates') as $template) {

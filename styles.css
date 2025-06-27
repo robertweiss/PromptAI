@@ -1,0 +1,18 @@
+.InputfieldHeaderHidden>.InputfieldContent, .InputfieldHeaderHidden+.InputfieldContent {
+    padding-top: 0;
+}
+
+.InputfieldForm > .Inputfields > #InputfieldMarkup3 {
+    outline: none !important;
+    padding: 0 !important;
+    margin-top: 0 !important;
+    background: transparent !important;
+}
+
+.prompt-config-items {
+    margin-top: 0;
+}
+
+.prompt-config-item {
+    margin-top: 20px;
+}
