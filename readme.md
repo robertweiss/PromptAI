@@ -27,6 +27,7 @@ Configure these settings in the module configuration (Modules > Site > PromptAI 
 - **AI Model** (required): Specify the model to use (see provider documentation for available models)
 - **API Key** (required): Your API key for the selected provider
 - **System Prompt** (optional): A general instruction sent to the AI with every request
+- **Individual Prompt Buttons** (optional): Show separate "Send to AI" buttons for each prompt configuration instead of one general button
 - **Test Settings** (optional): Send a test request to verify your configuration
 
 ### Prompt Configuration
@@ -48,6 +49,21 @@ Each prompt configuration consists of:
 - **Add**: Click "Add New Prompt Configuration" to create a new prompt
 - **Remove**: Click the trash icon to delete individual configurations
 - **Clean State**: You can remove all configurations to start fresh
+
+#### Button Behavior
+
+PromptAI offers two button modes when editing pages:
+
+**Single Button Mode (default):**
+- Shows one "Save + Send to AI" button
+- Processes all applicable prompt configurations when clicked
+
+**Individual Button Mode:**
+- Enable "Individual Prompt Buttons" in module configuration
+- Shows separate buttons for each prompt configuration
+- Button labels use the prompt's "Label" field (falls back to "Send to AI")
+- Only the selected prompt configuration is processed when clicked
+- Useful for selective AI processing and better user control
 
 > [!NOTE]
 > If an image field is the source, the target is treated as a custom subfield (See https://processwire.com/blog/posts/pw-3.0.142/ for info about image custom fields). If left empty, "description" is the default target.
