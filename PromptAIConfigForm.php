@@ -82,7 +82,7 @@ class PromptAIConfigForm {
         $html .= '<span class="item-controls" style="margin-right: 10px;">';
         $html .= '<i class="fa fa-trash btn-remove" x-on:click="removeFieldset(index)" title="' . $removeLabel . '"></i>';
         $html .= '</span>';
-        $html .= '<span class="item-label" x-text="`'.$configurationLabel.' ${index + 1}: ${fieldset.label || \''.$untitledLabel.'\'}`"></span>';
+        $html .= '<span class="item-label" x-text="`'.$configurationLabel.' ${index + 1}: ${fieldset.label || &quot;'.$untitledLabel.'&quot;}`"></span>';
         $html .= '</label>';
         $html .= '<div class="InputfieldContent uk-form-controls">';
         $html .= '<ul class="Inputfields uk-grid uk-grid-collapse uk-grid-match uk-grid-stack" uk-grid>';
@@ -143,7 +143,7 @@ class PromptAIConfigForm {
         $html .= '</template>';
         $html .= '</ul>';
 
-        $html .= '<a class="" href="#" x-on:click="addFieldset()"><i class="fa fa-fw fa-plus-circle" data-on="fa-spin fa-spinner" data-off="fa-plus-circle"></i>'.$addPromptLabel.'</a>';
+        $html .= '<a class="" href="#" x-on:click.prevent="addFieldset()"><i class="fa fa-fw fa-plus-circle" data-on="fa-spin fa-spinner" data-off="fa-plus-circle"></i>'.$addPromptLabel.'</a>';
 
         return $html;
     }
@@ -187,6 +187,18 @@ class PromptAIConfigForm {
                         prompt: '',
                         label: ''
                     });
+                    
+                    // Scroll to the new fieldset after it's been added to the DOM
+                    setTimeout(() => {
+                        const newFieldsets = document.querySelectorAll('.prompt-config-item');
+                        const lastFieldset = newFieldsets[newFieldsets.length - 1];
+                        if (lastFieldset) {
+                            lastFieldset.scrollIntoView({ 
+                                behavior: 'smooth', 
+                                block: 'center' 
+                            });
+                        }
+                    }, 100);
                 },
                 removeFieldset(index) {
                     this.fieldsets.splice(index, 1);

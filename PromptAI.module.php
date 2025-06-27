@@ -37,13 +37,13 @@ class PromptAI extends Process implements Module {
 
     public function ___execute() {
         $configForm = new PromptAIConfigForm();
-        
+
         // Handle form submission
         if(wire('input')->post('submit_prompt_config')) {
             $configForm->processSubmission();
             $this->session->redirect($this->page->url);
         }
-        
+
         return $configForm->render();
     }
 
@@ -82,7 +82,9 @@ class PromptAI extends Process implements Module {
         $page = $event->arguments('page');
 
         // Only start the magic if post variable is set
-        if (!str_contains($this->input->post->text('_after_submit_action'), 'save_and_chat')) {
+        $submitAction = $this->input->post->text('_after_submit_action');
+
+        if (!str_contains($submitAction, 'save_and_chat')) {
             return;
         }
 
@@ -97,7 +99,14 @@ class PromptAI extends Process implements Module {
         $this->promptMatrix = $this->parsePromptMatrix($this->promptMatrixString);
 
         // Let’s go!
-        $this->processPrompts($page);
+        // Check if a specific prompt should be processed
+        if (preg_match('/save_and_chat_(\d+)/', $submitAction, $matches)) {
+            $promptIndex = (int)$matches[1];
+            $this->processSpecificPrompt($page, $promptIndex);
+        } else {
+            // Process all prompts (default behavior)
+            $this->processPrompts($page);
+        }
     }
 
     public function addDropdownOption($event): void {
@@ -118,13 +127,31 @@ class PromptAI extends Process implements Module {
 
         $actions = $event->return;
 
-        $label = "%s + ".__('Send to AI');
+        // Check if individual buttons are enabled
+        if ($this->individualButtons) {
+            // Add individual buttons for each relevant prompt configuration
+            $relevantPrompts = $this->getRelevantPrompts($page->template->name);
 
-        $actions[] = [
-            'value' => 'save_and_chat',
-            'icon' => 'magic',
-            'label' => $label,
-        ];
+            foreach ($relevantPrompts as $index => $promptEntity) {
+                $label = $promptEntity->label ?: __('Send to AI');
+                $buttonLabel = "%s + " . $label;
+
+                $actions[] = [
+                    'value' => 'save_and_chat_' . $index,
+                    'icon' => 'magic',
+                    'label' => $buttonLabel,
+                ];
+            }
+        } else {
+            // Add single general button
+            $label = "%s + ".__('Send to AI');
+
+            $actions[] = [
+                'value' => 'save_and_chat',
+                'icon' => 'magic',
+                'label' => $label,
+            ];
+        }
 
         $event->return = $actions;
     }
@@ -275,7 +302,7 @@ class PromptAI extends Process implements Module {
         }
     }
 
-    public function parsePromptMatrix(string $promptMatrixString, $showErrors = false): array {
+    public function parsePromptMatrix(?string $promptMatrixString = '', $showErrors = false): array {
         $promptMatrix = [];
         $promptMatrixRows = array_filter(array_map('trim', explode("\n", $promptMatrixString)));
         $c = 0;
@@ -384,5 +411,32 @@ class PromptAI extends Process implements Module {
         }
 
         return false;
+    }
+
+    private function getRelevantPrompts(string $templateName): array {
+        $relevantPrompts = [];
+        foreach ($this->promptMatrix as $index => $promptMatrixEntity) {
+            if ($promptMatrixEntity->template === $templateName || $promptMatrixEntity->template === '') {
+                $relevantPrompts[$index] = $promptMatrixEntity;
+            }
+        }
+        return $relevantPrompts;
+    }
+
+    private function processSpecificPrompt(Page $page, int $promptIndex): void {
+        if (!isset($this->promptMatrix[$promptIndex])) {
+            $this->error(__('Invalid prompt configuration index'));
+            return;
+        }
+
+        $promptMatrixEntity = $this->promptMatrix[$promptIndex];
+
+        // Check if this prompt applies to the current template
+        if ($promptMatrixEntity->template !== '' && $promptMatrixEntity->template !== $page->template->name) {
+            $this->error(__('This prompt configuration does not apply to the current template'));
+            return;
+        }
+
+        $this->processField($page, $promptMatrixEntity);
     }
 }

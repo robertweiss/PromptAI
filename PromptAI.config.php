@@ -90,7 +90,7 @@ class PromptAIConfig extends ModuleConfig {
         );
 
         $inputfields->add(
-            $this->buildInputField('InputfieldTextArea', [
+            $this->buildInputField('InputfieldHidden', [
                 'name+id' => 'promptMatrix',
                 'label' => $this->_('Prompts'),
                 'description' => $this->_('Here you can set the template, the source field, the target field and the prompt for each AI call. You can set multiple calls by adding a new line. Template, source, target and prompt should be seperated by a double colon.'),
@@ -102,6 +102,18 @@ class PromptAIConfig extends ModuleConfig {
         if (wire('input')->post('promptMatrix')) {
             wire()->modules('PromptAI')->parsePromptMatrix(wire('input')->post('promptMatrix'), true);
         }
+
+        $inputfields->add(
+            $this->buildInputField('InputfieldCheckbox', [
+                'name+id' => 'individualButtons',
+                'label' => $this->_('Individual prompt buttons'),
+                'description' => $this->_('Show separate "Send to AI" buttons for each prompt configuration instead of one general button'),
+                'notes' => $this->_('When enabled, each prompt configuration will have its own button labeled with the configuration\'s label (or "Send to AI" as fallback)'),
+                'value' => 1,
+                'checked' => '',
+                'columnWidth' => 100,
+            ])
+        );
 
         $inputfields->add(
             $this->buildInputField('InputfieldCheckbox', [
