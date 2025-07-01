@@ -1,13 +1,20 @@
 # PromptAI
 
-PromptAI is a ProcessWire CMS module that utilizes AI to process text fields upon saving. The processed text can be saved back to the original field or a different one on the same page. For image fields, the AI can write image descriptions or populate custom image subfields.
+PromptAI is a ProcessWire CMS module that utilizes AI to process text and image fields upon saving. The processed text can be saved back to the original field or a different one on the same page. The module supports regular page fields, repeater fields, and repeater matrix fields. For image fields, the AI can write image descriptions or populate custom image subfields.
 
 ## Field support
 
+### Regular Fields
 - PageTitle(Language)
 - Text(Language)
 - Textarea(Language)
 - Pageimage(s), including custom fields
+
+### Repeater Support
+- **Repeater fields**: Process fields within repeater items
+- **Repeater Matrix fields**: Process fields within repeater matrix items
+- All supported field types work within repeaters
+- Each repeater item is processed individually
 
 ## Installation
 
@@ -39,7 +46,7 @@ Navigate to **Setup > Prompt AI** to configure your AI prompts using the visual 
 Each prompt configuration consists of:
 
 - **Label**: Optional identifier for easy recognition
-- **Template**: The template this prompt applies to (leave empty for all templates)
+- **Template**: The template this prompt applies to (leave empty for all templates, or select a repeater template to process repeater fields)
 - **Source Field**: The field whose content is sent to the AI
 - **Target Field**: Where the AI result is saved (leave empty to overwrite the source field)
 - **Prompt**: Instructions for the AI (prefixed to the source field content)
@@ -66,9 +73,14 @@ PromptAI offers two button modes when editing pages:
 - Useful for selective AI processing and better user control
 
 > [!NOTE]
-> If an image field is the source, the target is treated as a custom subfield (See https://processwire.com/blog/posts/pw-3.0.142/ for info about image custom fields). If left empty, "description" is the default target.
+> - If an image field is the source, the target is treated as a custom subfield (See https://processwire.com/blog/posts/pw-3.0.142/ for info about image custom fields). If left empty, "description" is the default target.
+> - Repeater templates are automatically detected and labeled as "Repeater: fieldname" in the template dropdown.
+> - When processing repeaters, each repeater item is processed individually with the same prompt.
+> - The module supports both regular Repeater fields and Repeater Matrix fields.
 
 ### Supported field combinations / Examples:
+
+#### Regular Page Fields
 
 1. **Source text field → Target text field:** Overwrites target field with the result.  
    - Template: `basic-page`
@@ -93,5 +105,25 @@ PromptAI offers two button modes when editing pages:
    - Source Field: `images`
    - Target Field: `alt_text`
    - Prompt: `Create a short alt-text for this image`
+
+#### Repeater Fields
+
+5. **Repeater text field processing:** Process text fields within repeater items.  
+   - Template: `Repeater: gallery` (automatically detected)
+   - Source Field: `title`
+   - Target Field: `description`
+   - Prompt: `Create a compelling description based on this title`
+
+6. **Repeater image field processing:** Process image fields within repeater items.  
+   - Template: `Repeater: portfolio_items`
+   - Source Field: `project_image`
+   - Target Field: (empty - uses description)
+   - Prompt: `Describe this portfolio image professionally`
+
+7. **Repeater Matrix field processing:** Process fields within repeater matrix items.  
+   - Template: `Repeater: content_blocks`
+   - Source Field: `heading`
+   - Target Field: `subheading`
+   - Prompt: `Create a catchy subheading for this section`
 
 **Note:** This is a beta release. While it performs well in production, please test thoroughly before deploying. Report any bugs via GitHub issues to help improve the module.

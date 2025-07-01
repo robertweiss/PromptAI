@@ -93,8 +93,8 @@ class PromptAIConfig extends ModuleConfig {
             $this->buildInputField('InputfieldHidden', [
                 'name+id' => 'promptMatrix',
                 'label' => $this->_('Prompts'),
-                'description' => $this->_('Here you can set the template, the source field, the target field and the prompt for each AI call. You can set multiple calls by adding a new line. Template, source, target and prompt should be seperated by a double colon.'),
-                'notes' => $this->_('Example: "home::copy::copy_short::Create a short summary of the following text:". If you want to use the a call for all templates, leave it empty ("::source::target::prompt").'),
+                'description' => $this->_('Prompt configurations are stored in JSON format with template and field IDs. Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),
+                'notes' => $this->_('This field stores the prompt configuration data. Please use the dedicated Prompt AI configuration page to modify settings instead of editing this field directly.'),
                 'columnWidth' => 100,
             ])
         );
