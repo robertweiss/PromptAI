@@ -39,7 +39,7 @@ class PromptAI extends Process implements Module {
         $configForm = new PromptAIConfigForm();
 
         // Handle form submission
-        if(wire('input')->post('submit_prompt_config')) {
+        if (wire('input')->post('submit_prompt_config')) {
             $configForm->processSubmission();
             $this->session->redirect($this->page->url);
         }
@@ -127,7 +127,7 @@ class PromptAI extends Process implements Module {
         $this->promptMatrix = $this->parsePromptMatrix($this->promptMatrixString);
 
         // Only show option if promptMatrix has page template or if there is a wildcard prompt
-        if (!$this->showDropdownForThisTemplate($page->template)) {
+        if (!$this->showDropdownForThisPage($page)) {
             return;
         }
 
@@ -136,14 +136,14 @@ class PromptAI extends Process implements Module {
         // Check if individual buttons are enabled
         if ($this->individualButtons) {
             // Add individual buttons for each relevant prompt configuration
-            $relevantPrompts = $this->getRelevantPrompts($page->template);
+            $relevantPrompts = $this->getRelevantPrompts($page);
 
             foreach ($relevantPrompts as $index => $promptEntity) {
                 $label = $promptEntity->label ?: __('Send to AI');
-                $buttonLabel = "%s + " . $label;
+                $buttonLabel = "%s + ".$label;
 
                 $actions[] = [
-                    'value' => 'save_and_chat_' . $index,
+                    'value' => 'save_and_chat_'.$index,
                     'icon' => 'magic',
                     'label' => $buttonLabel,
                 ];
@@ -232,26 +232,66 @@ class PromptAI extends Process implements Module {
 
     private function processField(Page $page, PromptMatrixEntity $promptMatrixEntity): void {
         $page->of(false);
-        $fields = $page->template->fields;
-        $sourceField = null;
+        // Template can differ from Page template when a repeater field is set as template
+        $template = wire('templates')->get($promptMatrixEntity->template);
 
+        // Handle Repeater fields
+        if (str_starts_with($template->name, 'repeater_')) {
+            $repeaterFieldName = str_replace('repeater_', '', $template->name);
+            $repeater = $page->get($repeaterFieldName);
+            
+            if (!$repeater || !$repeater->count()) {
+                return;
+            }
+            
+            foreach ($repeater as $item) {
+                $this->processRepeaterItem($item, $promptMatrixEntity);
+            }
+
+            return;
+        }
+
+        $fields = $page->template->fields;
         // Find the right source field by ID
         $sourceField = $fields->get($promptMatrixEntity->sourceField);
 
         if (!$sourceField) {
-            $this->error(__('Source field with ID ') . $promptMatrixEntity->sourceField . __(' does not exist in template ') . $page->template->name);
+            $this->error(__('Source field with ID ').$promptMatrixEntity->sourceField.__(' does not exist in template ').$page->template->name);
 
             return;
         }
 
         // Process file field
-        if (in_array(get_class($field->type), $this->fileFieldTypes)) {
-            $this->processFileField($field, $page, $promptMatrixEntity);
+        if (in_array(get_class($sourceField->type), $this->fileFieldTypes)) {
+            $this->processFileField($sourceField, $page, $promptMatrixEntity);
         }
 
         // Process text field
-        if (in_array(get_class($field->type), $this->textFieldTypes)) {
-            $this->processTextField($field, $page, $promptMatrixEntity);
+        if (in_array(get_class($sourceField->type), $this->textFieldTypes)) {
+            $this->processTextField($sourceField, $page, $promptMatrixEntity);
+        }
+    }
+
+    private function processRepeaterItem(Page $item, PromptMatrixEntity $promptMatrixEntity): void {
+        $item->of(false);
+        $fields = $item->template->fields;
+        
+        // Find the right source field by ID
+        $sourceField = $fields->get($promptMatrixEntity->sourceField);
+        
+        if (!$sourceField) {
+            $this->error(__('Source field with ID ') . $promptMatrixEntity->sourceField . __(' does not exist in repeater template ') . $item->template->name);
+            return;
+        }
+        
+        // Process file field
+        if (in_array(get_class($sourceField->type), $this->fileFieldTypes)) {
+            $this->processFileField($sourceField, $item, $promptMatrixEntity);
+        }
+        
+        // Process text field
+        if (in_array(get_class($sourceField->type), $this->textFieldTypes)) {
+            $this->processTextField($sourceField, $item, $promptMatrixEntity);
         }
     }
 
@@ -328,6 +368,7 @@ class PromptAI extends Process implements Module {
             if ($showErrors) {
                 $this->error(__('Invalid JSON format in prompt configuration'));
             }
+
             return $promptMatrix;
         }
 
@@ -345,14 +386,14 @@ class PromptAI extends Process implements Module {
             // Validation
             if (!$promptMatrixEntity->sourceField) {
                 if ($showErrors) {
-                    wire()->error(__('Source field is missing in configuration ') . ($index + 1));
+                    wire()->error(__('Source field is missing in configuration ').($index + 1));
                 }
                 continue;
             }
 
             if (!$promptMatrixEntity->prompt) {
                 if ($showErrors) {
-                    $this->error(__('Prompt is missing in configuration ') . ($index + 1));
+                    $this->error(__('Prompt is missing in configuration ').($index + 1));
                 }
                 continue;
             }
@@ -360,7 +401,7 @@ class PromptAI extends Process implements Module {
             // Validate template ID exists (if set)
             if ($promptMatrixEntity->template && !array_key_exists($promptMatrixEntity->template, $availableTemplates)) {
                 if ($showErrors) {
-                    $this->error(__('Template ID does not exist in configuration ') . ($index + 1));
+                    $this->error(__('Template ID does not exist in configuration ').($index + 1));
                 }
                 continue;
             }
@@ -368,7 +409,7 @@ class PromptAI extends Process implements Module {
             // Validate source field ID exists
             if (!array_key_exists($promptMatrixEntity->sourceField, $availableFields)) {
                 if ($showErrors) {
-                    $this->error(__('Source field ID does not exist in configuration ') . ($index + 1));
+                    $this->error(__('Source field ID does not exist in configuration ').($index + 1));
                 }
                 continue;
             }
@@ -376,7 +417,7 @@ class PromptAI extends Process implements Module {
             // Validate target field ID exists (if set)
             if ($promptMatrixEntity->targetField && !array_key_exists($promptMatrixEntity->targetField, $availableFields)) {
                 if ($showErrors) {
-                    $this->error(__('Target field ID does not exist in configuration ') . ($index + 1));
+                    $this->error(__('Target field ID does not exist in configuration ').($index + 1));
                 }
                 continue;
             }
@@ -444,7 +485,7 @@ class PromptAI extends Process implements Module {
                     'sourceField' => $sourceFieldId,
                     'targetField' => $targetFieldId,
                     'prompt' => $prompt,
-                    'label' => $label
+                    'label' => $label,
                 ];
             }
         }
@@ -469,7 +510,7 @@ class PromptAI extends Process implements Module {
                     continue;
                 }
 
-                $label = $field->label ? $field->name.' ('.$field->label.')' : $field->name;
+                $label = $field->label ? $field->label.' ('.$field->name.')' : $field->name;
                 $fieldsOptions[$field->id] = $label;
             }
         }
@@ -484,11 +525,15 @@ class PromptAI extends Process implements Module {
                 if (in_array($template->name, $this->adminTemplates)) {
                     continue;
                 }
-                if ($template->flags && $template->flags === Template::flagSystem) {
-                    continue;
-                }
+//                if ($template->flags && $template->flags === Template::flagSystem) {
+//                    continue;
+//                }
 
-                $label = $template->label ? $template->name.' ('.$template->label.')' : $template->name;
+                $label = $template->label ? $template->label.' ('.$template->name.')' : $template->name;
+                if (str_starts_with($template->name, 'repeater_')) {
+                    $name = str_replace('repeater_', '', $template->name);
+                    $label = 'Repeater: '.$name;
+                }
                 $templatesOptions[$template->id] = $label;
             }
         }
@@ -496,11 +541,17 @@ class PromptAI extends Process implements Module {
         return $templatesOptions;
     }
 
-    private function showDropdownForThisTemplate(Template $template): bool {
-        $templateId = $template ? $template->id : null;
-
+    private function showDropdownForThisPage(Page $page): bool {
+        $template = $page ? $page->template : null;
         foreach ($this->promptMatrix as $promptMatrixEntity) {
-            if ($promptMatrixEntity->template === $templateId || $promptMatrixEntity->template === null) {
+            $entityTemplate = wire('templates')->get($promptMatrixEntity->template);
+            if (str_starts_with($entityTemplate->name, 'repeater_')) {
+                $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
+                if ($page->$repeaterName) {
+                    return true;
+                }
+            }
+            if ($promptMatrixEntity->template === $template->id || $promptMatrixEntity->template === null) {
                 return true;
             }
         }
@@ -508,29 +559,47 @@ class PromptAI extends Process implements Module {
         return false;
     }
 
-    private function getRelevantPrompts(Template $template): array {
-        $templateId = $template ? $template->id : null;
+    private function getRelevantPrompts(Page $page): array {
+        $template = $page ? $page->template : null;
 
         $relevantPrompts = [];
         foreach ($this->promptMatrix as $index => $promptMatrixEntity) {
-            if ($promptMatrixEntity->template === $templateId || $promptMatrixEntity->template === null) {
+            if ($promptMatrixEntity->template === $template->id || $promptMatrixEntity->template === null) {
                 $relevantPrompts[$index] = $promptMatrixEntity;
+                continue;
+            }
+
+            $entityTemplate = wire('templates')->get($promptMatrixEntity->template);
+            if (str_starts_with($entityTemplate->name, 'repeater_')) {
+                $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
+                if ($page->$repeaterName) {
+                    $relevantPrompts[$index] = $promptMatrixEntity;
+                }
             }
         }
+
         return $relevantPrompts;
     }
 
     private function processSpecificPrompt(Page $page, int $promptIndex): void {
         if (!isset($this->promptMatrix[$promptIndex])) {
             $this->error(__('Invalid prompt configuration index'));
+
             return;
         }
 
         $promptMatrixEntity = $this->promptMatrix[$promptIndex];
-
+        $relevantPrompts = $this->getRelevantPrompts($page);
+        $isAllowedPrompt = false;
+        foreach ($relevantPrompts as $promptEntity) {
+            if ($promptEntity === $promptMatrixEntity) {
+                $isAllowedPrompt = true;
+            }
+        }
         // Check if this prompt applies to the current template
-        if ($promptMatrixEntity->template !== null && $promptMatrixEntity->template !== $page->template->id) {
+        if (!$isAllowedPrompt) {
             $this->error(__('This prompt configuration does not apply to the current template'));
+
             return;
         }
 
