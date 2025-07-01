@@ -47,6 +47,12 @@ class PromptAI extends Process implements Module {
         return $configForm->render();
     }
 
+    public function upgrade($fromVersion, $toVersion) {
+        if ($fromVersion < 12 && $toVersion >= 12) {
+            $this->migratePromptMatrix();
+        }
+    }
+
     public function init() {
         if ($this->initSettings()) {
             $this->addHookAfter("ProcessPageEdit::getSubmitActions", $this, "addDropdownOption");
@@ -121,7 +127,7 @@ class PromptAI extends Process implements Module {
         $this->promptMatrix = $this->parsePromptMatrix($this->promptMatrixString);
 
         // Only show option if promptMatrix has page template or if there is a wildcard prompt
-        if (!$this->showDropdownForThisTemplate($page->template->name)) {
+        if (!$this->showDropdownForThisTemplate($page->template)) {
             return;
         }
 
@@ -130,7 +136,7 @@ class PromptAI extends Process implements Module {
         // Check if individual buttons are enabled
         if ($this->individualButtons) {
             // Add individual buttons for each relevant prompt configuration
-            $relevantPrompts = $this->getRelevantPrompts($page->template->name);
+            $relevantPrompts = $this->getRelevantPrompts($page->template);
 
             foreach ($relevantPrompts as $index => $promptEntity) {
                 $label = $promptEntity->label ?: __('Send to AI');
@@ -216,7 +222,7 @@ class PromptAI extends Process implements Module {
 
     private function processPrompts(Page $page): void {
         foreach ($this->promptMatrix as $promptMatrixEntity) {
-            if ($promptMatrixEntity->template !== '' && $promptMatrixEntity->template !== $page->template->name) {
+            if ($promptMatrixEntity->template !== null && $promptMatrixEntity->template !== $page->template->id) {
                 continue;
             }
 
@@ -229,17 +235,11 @@ class PromptAI extends Process implements Module {
         $fields = $page->template->fields;
         $sourceField = null;
 
-        /** @var Field $field */
-        foreach ($fields as $field) {
-            // Find the right source field
-            if ($field->name === $promptMatrixEntity->sourceField) {
-                $sourceField = $field;
-                break;
-            }
-        }
+        // Find the right source field by ID
+        $sourceField = $fields->get($promptMatrixEntity->sourceField);
 
         if (!$sourceField) {
-            $this->error(__('Source field does not exist in template "'.$page->template->name.'"'));
+            $this->error(__('Source field with ID ') . $promptMatrixEntity->sourceField . __(' does not exist in template ') . $page->template->name);
 
             return;
         }
@@ -271,9 +271,17 @@ class PromptAI extends Process implements Module {
         }
 
         $target = $promptMatrixEntity->targetField;
+        $sourceField = wire('fields')->get($promptMatrixEntity->sourceField);
         // Check if target field even exists before saving into the void. If not, use source field as target.
-        if ($page->get($target) === null) {
-            $target = $field->name;
+        if ($target) {
+            $targetField = wire('fields')->get($target);
+            if (!$targetField || $page->get($targetField->name) === null) {
+                $target = $sourceField->name;
+            } else {
+                $target = $targetField->name;
+            }
+        } else {
+            $target = $sourceField->name;
         }
 
         $page->setAndSave($target, $result, ['noHook' => true]);
@@ -285,7 +293,11 @@ class PromptAI extends Process implements Module {
             return;
         }
 
-        $targetSubfield = $promptMatrixEntity->targetField ?: 'description';;
+        $targetSubfield = 'description';
+        if ($promptMatrixEntity->targetField) {
+            $targetField = wire('fields')->get($promptMatrixEntity->targetField);
+            $targetSubfield = $targetField ? $targetField->name : 'description';
+        }
 
         $page->of(false);
         /** @var PageImage $image */
@@ -304,57 +316,67 @@ class PromptAI extends Process implements Module {
 
     public function parsePromptMatrix(?string $promptMatrixString = '', $showErrors = false): array {
         $promptMatrix = [];
-        $promptMatrixRows = array_filter(array_map('trim', explode("\n", $promptMatrixString)));
-        $c = 0;
-        foreach ($promptMatrixRows as $promptMatrixRow) {
-            $c++;
-            $promptMatrixRow = explode('::', $promptMatrixRow);
-            $promptMatrixEntity = new PromptMatrixEntity();
-            $promptMatrixEntity->template = $promptMatrixRow[0] ?? null;
-            $promptMatrixEntity->sourceField = $promptMatrixRow[1] ?? null;
-            $promptMatrixEntity->targetField = $promptMatrixRow[2] ?? null;
-            $promptMatrixEntity->prompt = $promptMatrixRow[3] ?? null;
-            $promptMatrixEntity->label = $promptMatrixRow[4] ?? null;
 
-            // Is source field set?
+        // If empty, return empty array
+        if (empty($promptMatrixString)) {
+            return $promptMatrix;
+        }
+
+        // Parse JSON format (new format)
+        $jsonData = json_decode($promptMatrixString, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
+            if ($showErrors) {
+                $this->error(__('Invalid JSON format in prompt configuration'));
+            }
+            return $promptMatrix;
+        }
+
+        $availableTemplates = $this->getTemplateOptions();
+        $availableFields = $this->getFieldOptions();
+
+        foreach ($jsonData as $index => $config) {
+            $promptMatrixEntity = new PromptMatrixEntity();
+            $promptMatrixEntity->template = $config['template'] ?? null;
+            $promptMatrixEntity->sourceField = $config['sourceField'] ?? null;
+            $promptMatrixEntity->targetField = $config['targetField'] ?? null;
+            $promptMatrixEntity->prompt = $config['prompt'] ?? null;
+            $promptMatrixEntity->label = $config['label'] ?? null;
+
+            // Validation
             if (!$promptMatrixEntity->sourceField) {
                 if ($showErrors) {
-                    wire()->error(__('Source field is missing in line '.$c));;
+                    wire()->error(__('Source field is missing in configuration ') . ($index + 1));
                 }
                 continue;
             }
 
-            // Is prompt set?
             if (!$promptMatrixEntity->prompt) {
                 if ($showErrors) {
-                    $this->error(__('Prompt is missing in line '.$c));;
+                    $this->error(__('Prompt is missing in configuration ') . ($index + 1));
                 }
                 continue;
             }
 
-            $availableTemplates = $this->getTemplateOptions();
-            $availableFields = $this->getFieldOptions();
-
-            // Does template name exist (if set)?
-            if ($promptMatrixEntity->template && !in_array($promptMatrixEntity->template, $availableTemplates)) {
+            // Validate template ID exists (if set)
+            if ($promptMatrixEntity->template && !array_key_exists($promptMatrixEntity->template, $availableTemplates)) {
                 if ($showErrors) {
-                    $this->error(__('Template does not exist in line '.$c));
+                    $this->error(__('Template ID does not exist in configuration ') . ($index + 1));
                 }
                 continue;
             }
 
-            // Does source field name exist?
-            if (!in_array($promptMatrixEntity->sourceField, $availableFields)) {
+            // Validate source field ID exists
+            if (!array_key_exists($promptMatrixEntity->sourceField, $availableFields)) {
                 if ($showErrors) {
-                    $this->error(__('Source field does not exist in line '.$c));
+                    $this->error(__('Source field ID does not exist in configuration ') . ($index + 1));
                 }
                 continue;
             }
 
-            // Does target field name exist (if set)?
-            if ($promptMatrixEntity->targetField && !in_array($promptMatrixEntity->targetField, $availableFields)) {
+            // Validate target field ID exists (if set)
+            if ($promptMatrixEntity->targetField && !array_key_exists($promptMatrixEntity->targetField, $availableFields)) {
                 if ($showErrors) {
-                    $this->error(__('Target field does not exist in line '.$c));
+                    $this->error(__('Target field ID does not exist in configuration ') . ($index + 1));
                 }
                 continue;
             }
@@ -362,9 +384,78 @@ class PromptAI extends Process implements Module {
             $promptMatrix[] = $promptMatrixEntity;
         }
 
-//        bd($promptMatrix);
-
         return $promptMatrix;
+    }
+
+    private function migratePromptMatrix(): void {
+        $currentConfig = $this->get('promptMatrix');
+
+        if (empty($currentConfig)) {
+            return;
+        }
+
+        // Check if already in JSON format
+        $jsonData = json_decode($currentConfig, true);
+        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
+            return; // Already migrated
+        }
+
+        // Parse old format and convert to new JSON format
+        $newConfig = [];
+        $promptMatrixRows = array_filter(array_map('trim', explode("\n", $currentConfig)));
+
+        foreach ($promptMatrixRows as $promptMatrixRow) {
+            $parts = explode('::', $promptMatrixRow);
+
+            $templateName = $parts[0] ?? '';
+            $sourceFieldName = $parts[1] ?? '';
+            $targetFieldName = $parts[2] ?? '';
+            $prompt = $parts[3] ?? '';
+            $label = $parts[4] ?? '';
+
+            // Skip if required fields are missing
+            if (empty($sourceFieldName) || empty($prompt)) {
+                continue;
+            }
+
+            // Convert names to IDs
+            $templateId = null;
+            if (!empty($templateName)) {
+                $template = wire('templates')->get($templateName);
+                $templateId = $template ? $template->id : null;
+            }
+
+            $sourceFieldId = null;
+            if (!empty($sourceFieldName)) {
+                $sourceField = wire('fields')->get($sourceFieldName);
+                $sourceFieldId = $sourceField ? $sourceField->id : null;
+            }
+
+            $targetFieldId = null;
+            if (!empty($targetFieldName)) {
+                $targetField = wire('fields')->get($targetFieldName);
+                $targetFieldId = $targetField ? $targetField->id : null;
+            }
+
+            // Only add if source field exists
+            if ($sourceFieldId) {
+                $newConfig[] = [
+                    'template' => $templateId,
+                    'sourceField' => $sourceFieldId,
+                    'targetField' => $targetFieldId,
+                    'prompt' => $prompt,
+                    'label' => $label
+                ];
+            }
+        }
+
+        // Save new JSON format
+        $jsonConfig = json_encode($newConfig, JSON_PRETTY_PRINT);
+        $moduleConfig = wire('modules')->getConfig('PromptAI');
+        $moduleConfig['promptMatrix'] = $jsonConfig;
+        wire('modules')->saveConfig('PromptAI', $moduleConfig);
+
+        $this->message(__('PromptAI configuration migrated to new format'));
     }
 
     public function getFieldOptions() {
@@ -378,7 +469,8 @@ class PromptAI extends Process implements Module {
                     continue;
                 }
 
-                $fieldsOptions[] = $field->name;
+                $label = $field->label ? $field->name.' ('.$field->label.')' : $field->name;
+                $fieldsOptions[$field->id] = $label;
             }
         }
 
@@ -396,16 +488,19 @@ class PromptAI extends Process implements Module {
                     continue;
                 }
 
-                $templatesOptions[] = $template->name;
+                $label = $template->label ? $template->name.' ('.$template->label.')' : $template->name;
+                $templatesOptions[$template->id] = $label;
             }
         }
 
         return $templatesOptions;
     }
 
-    private function showDropdownForThisTemplate(string $templateName): bool {
+    private function showDropdownForThisTemplate(Template $template): bool {
+        $templateId = $template ? $template->id : null;
+
         foreach ($this->promptMatrix as $promptMatrixEntity) {
-            if ($promptMatrixEntity->template === $templateName || $promptMatrixEntity->template === '') {
+            if ($promptMatrixEntity->template === $templateId || $promptMatrixEntity->template === null) {
                 return true;
             }
         }
@@ -413,10 +508,12 @@ class PromptAI extends Process implements Module {
         return false;
     }
 
-    private function getRelevantPrompts(string $templateName): array {
+    private function getRelevantPrompts(Template $template): array {
+        $templateId = $template ? $template->id : null;
+
         $relevantPrompts = [];
         foreach ($this->promptMatrix as $index => $promptMatrixEntity) {
-            if ($promptMatrixEntity->template === $templateName || $promptMatrixEntity->template === '') {
+            if ($promptMatrixEntity->template === $templateId || $promptMatrixEntity->template === null) {
                 $relevantPrompts[$index] = $promptMatrixEntity;
             }
         }
@@ -432,7 +529,7 @@ class PromptAI extends Process implements Module {
         $promptMatrixEntity = $this->promptMatrix[$promptIndex];
 
         // Check if this prompt applies to the current template
-        if ($promptMatrixEntity->template !== '' && $promptMatrixEntity->template !== $page->template->name) {
+        if ($promptMatrixEntity->template !== null && $promptMatrixEntity->template !== $page->template->id) {
             $this->error(__('This prompt configuration does not apply to the current template'));
             return;
         }

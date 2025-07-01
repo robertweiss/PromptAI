@@ -1,9 +1,9 @@
 <?php namespace ProcessWire;
 
 class PromptMatrixEntity {
-    public ?string $template;
-    public ?string $sourceField;
-    public ?string $targetField;
+    public ?int $template;
+    public ?int $sourceField;
+    public ?int $targetField;
     public ?string $prompt;
     public ?string $label;
 }

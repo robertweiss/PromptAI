@@ -100,8 +100,8 @@ class PromptAIConfigForm {
         $html .= '<div class="InputfieldContent uk-form-controls">';
         $html .= '<select class="uk-select" x-model="fieldset.template" :name="`template_${index}`">';
         $html .= '<option value="">'.$allTemplatesOption.'</option>';
-        foreach ($templateOptions as $template) {
-            $html .= '<option value="'.$template.'">'.$template.'</option>';
+        foreach ($templateOptions as $id => $name) {
+            $html .= '<option value="'.$id.'">'.$name.'</option>';
         }
         $html .= '</select>';
         $html .= '</div></li>';
@@ -112,8 +112,8 @@ class PromptAIConfigForm {
         $html .= '<div class="InputfieldContent uk-form-controls">';
         $html .= '<select class="uk-select" x-model="fieldset.sourceField" :name="`sourceField_${index}`" required>';
         $html .= '<option value="">'.$selectSourceOption.'</option>';
-        foreach ($fieldOptions as $field) {
-            $html .= '<option value="'.$field.'">'.$field.'</option>';
+        foreach ($fieldOptions as $id => $name) {
+            $html .= '<option value="'.$id.'">'.$name.'</option>';
         }
         $html .= '</select>';
         $html .= '</div></li>';
@@ -124,8 +124,8 @@ class PromptAIConfigForm {
         $html .= '<div class="InputfieldContent uk-form-controls">';
         $html .= '<select class="uk-select" x-model="fieldset.targetField" :name="`targetField_${index}`">';
         $html .= '<option value="">'.$useSourceOption.'</option>';
-        foreach ($fieldOptions as $field) {
-            $html .= '<option value="'.$field.'">'.$field.'</option>';
+        foreach ($fieldOptions as $id => $name) {
+            $html .= '<option value="'.$id.'">'.$name.'</option>';
         }
         $html .= '</select>';
         $html .= '</div></li>';
@@ -157,7 +157,7 @@ class PromptAIConfigForm {
                 'sourceField' => $entity->sourceField ?: '',
                 'targetField' => $entity->targetField ?: '',
                 'prompt' => $entity->prompt ?: '',
-                'label' => $entity->label ?? '',
+                'label' => $entity->label ?: '',
             ];
         }
 
@@ -227,8 +227,8 @@ class PromptAIConfigForm {
             }
         }
 
-        // Convert to prompt matrix string format
-        $promptMatrixLines = [];
+        // Convert to JSON format
+        $jsonConfig = [];
         for ($i = 0; $i <= $maxIndex; $i++) {
             if (!isset($configData[$i])) {
                 continue;
@@ -241,20 +241,22 @@ class PromptAIConfigForm {
                 continue;
             }
 
-            $template = $config['template'] ?? '';
-            $sourceField = $config['sourceField'] ?? '';
-            $targetField = $config['targetField'] ?? '';
+            $template = !empty($config['template']) ? (int)$config['template'] : null;
+            $sourceField = (int)$config['sourceField'];
+            $targetField = !empty($config['targetField']) ? (int)$config['targetField'] : null;
             $prompt = $config['prompt'] ?? '';
             $label = $config['label'] ?? '';
 
-            $line = $template.'::'.$sourceField.'::'.$targetField.'::'.$prompt;
-            if (!empty($label)) {
-                $line .= '::'.$label;
-            }
-            $promptMatrixLines[] = $line;
+            $jsonConfig[] = [
+                'template' => $template,
+                'sourceField' => $sourceField,
+                'targetField' => $targetField,
+                'prompt' => $prompt,
+                'label' => $label
+            ];
         }
 
-        $promptMatrixString = implode("\n", $promptMatrixLines);
+        $promptMatrixString = json_encode($jsonConfig, JSON_PRETTY_PRINT);
 
         // Save to module configuration
         $moduleConfig = wire('modules')->getConfig('PromptAI');
