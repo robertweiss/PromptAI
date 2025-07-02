@@ -36,10 +36,11 @@ class PromptAIConfig extends ModuleConfig {
             'provider' => 'anthropic',
             'model' => '',
             'apiKey' => '',
-            'includedTemplates' => [],
-            'sourceField' => [],
-            'targetField' => [],
-            'commandoString' => '',
+            'systemPrompt' => '',
+            'promptMatrix' => '',
+            'individualButtons' => 0,
+            'overwriteTarget' => 0,
+            'testSettings' => 0,
         ];
     }
 
@@ -111,7 +112,18 @@ class PromptAIConfig extends ModuleConfig {
                 'notes' => $this->_('When enabled, each prompt configuration will have its own button labeled with the configuration\'s label (or "Send to AI" as fallback)'),
                 'value' => 1,
                 'checked' => '',
-                'columnWidth' => 100,
+                'columnWidth' => 50,
+            ])
+        );
+
+        $inputfields->add(
+            $this->buildInputField('InputfieldCheckbox', [
+                'name+id' => 'overwriteTarget',
+                'label' => $this->_('Overwrite target field content'),
+                'description' => $this->_('If toggled on, the target field will be overwritten with the AI response. If toggled off, the AI response will only be written if the target field is empty.'),
+                'value' => 0,
+                'checked' => '',
+                'columnWidth' => 50,
             ])
         );
 

@@ -20,6 +20,7 @@ class PromptAI extends Process implements Module {
     private ?string $promptMatrixString;
     private ?array $promptMatrix;
     private int $throttleSave;
+    private bool $overwriteTarget;
 
     private array $adminTemplates = ['admin', 'language', 'user', 'permission', 'role'];
 
@@ -71,6 +72,7 @@ class PromptAI extends Process implements Module {
         $this->apiKey = $this->get('apiKey');
         $this->systemPrompt = $this->get('systemPrompt');
         $this->promptMatrixString = $this->get('promptMatrix');
+        $this->overwriteTarget = (bool)$this->get('overwriteTarget');
         $this->throttleSave = 5;
 
         return ($this->apiKey !== '' && $this->provider !== '' && $this->model !== '');
@@ -136,7 +138,7 @@ class PromptAI extends Process implements Module {
         $actions = $event->return;
 
         // Check if individual buttons are enabled
-        if ($this->individualButtons) {
+        if ($this->get('individualButtons')) {
             // Add individual buttons for each relevant prompt configuration
             $relevantPrompts = $this->getRelevantPrompts($page);
 
@@ -201,7 +203,7 @@ class PromptAI extends Process implements Module {
                             'application/json',
                             'text/json',
                             'application/xml',
-                            'text/xml'
+                            'text/xml',
                         ];
 
                         if (!in_array($mimeType, $supportedDocTypes)) {
@@ -340,13 +342,6 @@ class PromptAI extends Process implements Module {
             return;
         }
 
-        $content = trim($promptMatrixEntity->prompt.PHP_EOL.$value);
-        $result = $this->chat($content);
-
-        if (!$result) {
-            return;
-        }
-
         $target = $promptMatrixEntity->targetField;
         $sourceField = wire('fields')->get($promptMatrixEntity->sourceField);
         // Check if target field even exists before saving into the void. If not, use source field as target.
@@ -359,6 +354,18 @@ class PromptAI extends Process implements Module {
             }
         } else {
             $target = $sourceField->name;
+        }
+
+        // Check if target field already has content and overwrite is disabled
+        if (!$this->overwriteTarget && (string)$page->get($target)) {
+            return;
+        }
+
+        $content = trim($promptMatrixEntity->prompt.PHP_EOL.$value);
+        $result = $this->chat($content);
+
+        if (!$result) {
+            return;
         }
 
         $page->setAndSave($target, $result, ['noHook' => true]);
@@ -379,6 +386,11 @@ class PromptAI extends Process implements Module {
         $page->of(false);
         /** @var PageImage $image */
         foreach ($page->$fieldName as $file) {
+            // Check if target subfield already has content and overwrite is disabled
+            if (!$this->overwriteTarget && (string) $file->$targetSubfield) {
+                continue;
+            }
+
             $isImage = ((string)$field->type === 'FieldtypeImage');
             $filePath = ($isImage) ? $file->width(800)->filename : $file->filename;
             $attachmentType = ($isImage) ? 'image' : 'document';

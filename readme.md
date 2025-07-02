@@ -36,6 +36,7 @@ Configure these settings in the module configuration (Modules > Site > PromptAI 
 - **API Key** (required): Your API key for the selected provider
 - **System Prompt** (optional): A general instruction sent to the AI with every request
 - **Individual Prompt Buttons** (optional): Show separate "Send to AI" buttons for each prompt configuration instead of one general button
+- **Overwrite Target Field Content** (optional): Controls whether AI responses overwrite existing content in target fields (disabled by default)
 - **Test Settings** (optional): Send a test request to verify your configuration
 
 ### Prompt Configuration
@@ -71,6 +72,13 @@ PromptAI offers two button modes when editing pages:
 - Button labels use the prompt's "Label" field (falls back to "Send to AI")
 - Only the selected prompt configuration is processed when clicked
 - Useful for selective AI processing and better user control
+
+#### Content Overwrite Protection
+
+The **"Overwrite Target Field Content"** setting controls how the module handles existing content:
+
+- **Disabled (default)**: AI responses are only written to empty target fields/subfields, preserving existing content
+- **Enabled**: AI responses always overwrite existing content in target fields/subfields
 
 > [!NOTE]
 > - **Image & File fields**: Both work identically - the target field is treated as a custom subfield of the file/image (See https://processwire.com/blog/posts/pw-3.0.142/ for info about custom fields). If target is left empty, "description" is the default subfield.
