@@ -91,7 +91,7 @@ class PromptAIConfig extends ModuleConfig {
         );
 
         $inputfields->add(
-            $this->buildInputField('InputfieldHidden', [
+            $this->buildInputField('InputfieldTextarea', [
                 'name+id' => 'promptMatrix',
                 'label' => $this->_('Prompts'),
                 'description' => $this->_('Prompt configurations are stored in JSON format with template and field IDs. Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),

@@ -2,17 +2,29 @@
     padding-top: 0;
 }
 
-.InputfieldForm > .Inputfields > #InputfieldMarkup3 {
+.InputfieldForm > .Inputfields > #InputfieldMarkup10 {
     outline: none !important;
     padding: 0 !important;
     margin-top: 0 !important;
     background: transparent !important;
 }
 
-.prompt-config-items {
-    margin-top: 0;
+.InputfieldHeader.prompt-ai-config--item-header {
+    outline: 1px solid var(--border-color);
+    background: var(--blocks-background) !important;
+    padding-right: 16px;
+    padding-top: 10px;
 }
 
-.prompt-config-item {
-    margin-top: 20px;
+.prompt-ai-config--item {
+    margin-bottom: 20px;
+}
+
+.btn-remove {
+    cursor: pointer;
+}
+
+.prompt-ai-config--item-controls {
+    float: right;
+    margin-left: 10px;
 }

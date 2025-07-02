@@ -476,6 +476,8 @@ class PromptAI extends Process implements Module {
             $promptMatrix[] = $promptMatrixEntity;
         }
 
+        ray($promptMatrix);
+
         return $promptMatrix;
     }
 
