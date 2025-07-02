@@ -20,8 +20,8 @@ class PromptAIConfigForm {
         // Add Alpine.js script for functionality
         $out .= $this->getAlpineScript();
 
-        $out .= '<h2>'._('Prompt configuration').'</h2>';
-        $out .= '<p>'._('Configure the AI prompts that should be used for the different fields. If the source field is an image field, the target field is interpreted as a custom subfield of the image field (if left empty, the image description is used as the target instead).').'</p>';
+        $out .= '<h2>'._('Prompt Configuration').'</h2>';
+        $out .= '<p>'._('Configure the AI prompts that should be used for the different fields. If the source field is an image/file field, the target field is interpreted as a custom subfield of the image/file field (if left empty, the description is used as the target instead).').'</p>';
 
         /** @var InputfieldForm $form */
         $form = wire('modules')->get('InputfieldForm');
@@ -110,9 +110,10 @@ class PromptAIConfigForm {
 
         // Fieldset Template
         /** @var InputfieldSelect $field */
-        $field = $fieldset->InputfieldSelect;
-        $field->label = _('Template');
+        $field = $fieldset->InputfieldSelectMultiple;
+        $field->label = _('Template(s)');
         $field->notes = _('(leave empty for all templates)');
+        $field->class = 'uk-select';
         $field->attr(['x-model' => 'fieldset.template']);
         $field->options = ['' => _('-- All Templates --')] + $this->promptAI->getTemplateOptions();
         $field->columnWidth = 50;
@@ -123,7 +124,7 @@ class PromptAIConfigForm {
         $field = $fieldset->InputfieldSelect;
         $field->label = _('Source Field');
         $field->notes = _('(required)');
-        $field->attr(['x-model' => 'fieldset.sourceField']);
+        $field->attr(['x-model' => 'fieldset.sourceField', 'required' => 'required']);
         $field->options = ['' => _('-- Select Source Field --')] + $this->promptAI->getFieldOptions();
         $field->columnWidth = 50;
         $fieldset->add($field);
@@ -143,7 +144,7 @@ class PromptAIConfigForm {
         $field = $fieldset->InputfieldTextarea;
         $field->label = _('Prompt');
         $field->notes = _('(required)');
-        $field->attr(['rows' => 4, 'x-model' => 'fieldset.prompt']);
+        $field->attr(['rows' => 4, 'x-model' => 'fieldset.prompt', 'required' => 'required']);
         $field->columnWidth = 100;
         $fieldset->add($field);
 
@@ -156,7 +157,7 @@ class PromptAIConfigForm {
 
         foreach ($this->promptMatrix as $entity) {
             $initialData[] = [
-                'template' => $entity->template ?: '',
+                'template' => $entity->template ?: [], // Template is always an array
                 'sourceField' => $entity->sourceField ?: '',
                 'targetField' => $entity->targetField ?: '',
                 'prompt' => $entity->prompt ?: '',
@@ -164,11 +165,10 @@ class PromptAIConfigForm {
             ];
         }
 
-
         // If no existing data, start with one empty fieldset
         if (empty($initialData)) {
             $initialData[] = [
-                'template' => '',
+                'template' => [], // Empty array for AsmSelect
                 'sourceField' => '',
                 'targetField' => '',
                 'prompt' => '',
@@ -185,7 +185,7 @@ class PromptAIConfigForm {
                 fieldsets: {$initialDataJson},
                 addFieldset() {
                     this.fieldsets.push({
-                        template: '',
+                        template: [], // Empty array for AsmSelect
                         sourceField: '',
                         targetField: '',
                         prompt: '',
@@ -214,24 +214,21 @@ class PromptAIConfigForm {
 
     public function processSubmission(): void {
         $input = wire('input');
-
+        ray($input->post);
 
         // Get the JSON data from the hidden field
         $configDataJson = $input->post->text('prompt_config_data', ['maxLength' => 0]);
-
+ray($configDataJson);
         if (empty($configDataJson)) {
             wire('session')->error(_('No configuration data received.'));
             return;
         }
-
         // Parse the JSON data
         $configData = json_decode($configDataJson, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             wire('session')->error(_('Invalid configuration data format.'));
             return;
         }
-
-
 
         // Convert to the expected format
         $jsonConfig = [];
@@ -241,7 +238,12 @@ class PromptAIConfigForm {
                 continue;
             }
 
-            $template = !empty($config['template']) ? (int)$config['template'] : null;
+            // Handle template as array only
+            $template = null;
+            if (!empty($config['template']) && is_array($config['template'])) {
+                $template = array_map('intval', array_filter($config['template']));
+                $template = !empty($template) ? $template : null;
+            }
             $sourceField = (int)$config['sourceField'];
             $targetField = !empty($config['targetField']) ? (int)$config['targetField'] : null;
             $prompt = $config['prompt'] ?? '';

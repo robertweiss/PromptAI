@@ -54,6 +54,9 @@ class PromptAI extends Process implements Module {
         if ($fromVersion < 12 && $toVersion >= 12) {
             $this->migratePromptMatrix();
         }
+        if ($fromVersion < 15 && $toVersion >= 15) {
+            $this->migrateTemplateToArray();
+        }
     }
 
     public function init() {
@@ -260,12 +263,24 @@ class PromptAI extends Process implements Module {
 
     private function processPrompts(Page $page): void {
         foreach ($this->promptMatrix as $promptMatrixEntity) {
-            if ($promptMatrixEntity->template !== null && $promptMatrixEntity->template !== $page->template->id) {
+            if (!$this->templateMatches($promptMatrixEntity->template, $page->template->id)) {
                 continue;
             }
 
             $this->processField($page, $promptMatrixEntity);
         }
+    }
+
+    /**
+     * Check if a template configuration matches a given template ID
+     * Template configuration is always an array or null (for all templates)
+     */
+    private function templateMatches($configTemplate, int $pageTemplateId): bool {
+        if ($configTemplate === null || empty($configTemplate)) {
+            return true; // null/empty means all templates
+        }
+
+        return is_array($configTemplate) && in_array($pageTemplateId, $configTemplate);
     }
 
     private function processField(Page $page, PromptMatrixEntity $promptMatrixEntity): void {
@@ -449,12 +464,16 @@ class PromptAI extends Process implements Module {
                 continue;
             }
 
-            // Validate template ID exists (if set)
-            if ($promptMatrixEntity->template && !array_key_exists($promptMatrixEntity->template, $availableTemplates)) {
-                if ($showErrors) {
-                    $this->error(__('Template ID does not exist in configuration ').($index + 1));
+            // Validate template IDs exist (if set)
+            if ($promptMatrixEntity->template && is_array($promptMatrixEntity->template)) {
+                foreach ($promptMatrixEntity->template as $templateId) {
+                    if (!array_key_exists($templateId, $availableTemplates)) {
+                        if ($showErrors) {
+                            $this->error(__('Template ID ').$templateId.__(' does not exist in configuration ').($index + 1));
+                        }
+                        continue 2; // Skip this entire configuration
+                    }
                 }
-                continue;
             }
 
             // Validate source field ID exists
@@ -552,6 +571,39 @@ class PromptAI extends Process implements Module {
         $this->message(__('PromptAI configuration migrated to new format'));
     }
 
+    private function migrateTemplateToArray(): void {
+        $currentConfig = $this->get('promptMatrix');
+
+        if (empty($currentConfig)) {
+            return;
+        }
+
+        // Parse JSON format
+        $jsonData = json_decode($currentConfig, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
+            return; // Invalid format, skip migration
+        }
+
+        $migrated = false;
+        foreach ($jsonData as &$config) {
+            // Check if template is a single integer and convert to array
+            if (isset($config['template']) && is_int($config['template'])) {
+                $config['template'] = [$config['template']];
+                $migrated = true;
+            }
+        }
+
+        // Save updated configuration if changes were made
+        if ($migrated) {
+            $jsonConfig = json_encode($jsonData, JSON_PRETTY_PRINT);
+            $moduleConfig = wire('modules')->getConfig('PromptAI');
+            $moduleConfig['promptMatrix'] = $jsonConfig;
+            wire('modules')->saveConfig('PromptAI', $moduleConfig);
+
+            $this->message(__('PromptAI template configuration migrated to array format'));
+        }
+    }
+
     public function getFieldOptions() {
         $fieldsOptions = [];
         if (wire('fields')) {
@@ -595,15 +647,22 @@ class PromptAI extends Process implements Module {
     private function showDropdownForThisPage(Page $page): bool {
         $template = $page ? $page->template : null;
         foreach ($this->promptMatrix as $promptMatrixEntity) {
-            $entityTemplate = wire('templates')->get($promptMatrixEntity->template);
-            if (str_starts_with($entityTemplate->name, 'repeater_')) {
-                $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
-                if ($page->$repeaterName) {
-                    return true;
-                }
-            }
-            if ($promptMatrixEntity->template === $template->id || $promptMatrixEntity->template === null) {
+            // Check regular template matches first
+            if ($this->templateMatches($promptMatrixEntity->template, $template->id)) {
                 return true;
+            }
+            
+            // Check repeater templates
+            if (is_array($promptMatrixEntity->template)) {
+                foreach ($promptMatrixEntity->template as $templateId) {
+                    $entityTemplate = wire('templates')->get($templateId);
+                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'repeater_')) {
+                        $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
+                        if ($page->$repeaterName) {
+                            return true;
+                        }
+                    }
+                }
             }
         }
 
@@ -615,16 +674,22 @@ class PromptAI extends Process implements Module {
 
         $relevantPrompts = [];
         foreach ($this->promptMatrix as $index => $promptMatrixEntity) {
-            if ($promptMatrixEntity->template === $template->id || $promptMatrixEntity->template === null) {
+            if ($this->templateMatches($promptMatrixEntity->template, $template->id)) {
                 $relevantPrompts[$index] = $promptMatrixEntity;
                 continue;
             }
 
-            $entityTemplate = wire('templates')->get($promptMatrixEntity->template);
-            if (str_starts_with($entityTemplate->name, 'repeater_')) {
-                $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
-                if ($page->$repeaterName) {
-                    $relevantPrompts[$index] = $promptMatrixEntity;
+            // Handle repeater templates
+            if (is_array($promptMatrixEntity->template)) {
+                foreach ($promptMatrixEntity->template as $templateId) {
+                    $entityTemplate = wire('templates')->get($templateId);
+                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'repeater_')) {
+                        $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
+                        if ($page->$repeaterName) {
+                            $relevantPrompts[$index] = $promptMatrixEntity;
+                            break; // Found a matching repeater, no need to check others
+                        }
+                    }
                 }
             }
         }

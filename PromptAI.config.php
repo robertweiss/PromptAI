@@ -1,7 +1,7 @@
 <?php namespace ProcessWire;
 
 class PromptMatrixEntity {
-    public ?int $template;
+    public ?array $template;
     public ?int $sourceField;
     public ?int $targetField;
     public ?string $prompt;
