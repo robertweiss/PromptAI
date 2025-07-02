@@ -1,6 +1,6 @@
 # PromptAI
 
-PromptAI is a ProcessWire CMS module that utilizes AI to process text and image fields upon saving. The processed text can be saved back to the original field or a different one on the same page. The module supports regular page fields, repeater fields, and repeater matrix fields. For image fields, the AI can write image descriptions or populate custom image subfields.
+PromptAI is a ProcessWire CMS module that utilizes AI to process text, image, and file fields upon saving. The processed text can be saved back to the original field or a different one on the same page. The module supports regular page fields, repeater fields, and repeater matrix fields. For image and file fields, the AI can analyze content and write descriptions or populate custom subfields.
 
 ## Field support
 
@@ -9,6 +9,7 @@ PromptAI is a ProcessWire CMS module that utilizes AI to process text and image 
 - Text(Language)
 - Textarea(Language)
 - Pageimage(s), including custom fields
+- Pagefile(s) (PDF, RTF, Markdown, JSON, XML, CSV, TXT), including custom fields
 
 ### Repeater Support
 - **Repeater fields**: Process fields within repeater items
@@ -55,7 +56,6 @@ Each prompt configuration consists of:
 
 - **Add**: Click "Add New Prompt Configuration" to create a new prompt
 - **Remove**: Click the trash icon to delete individual configurations
-- **Clean State**: You can remove all configurations to start fresh
 
 #### Button Behavior
 
@@ -73,10 +73,12 @@ PromptAI offers two button modes when editing pages:
 - Useful for selective AI processing and better user control
 
 > [!NOTE]
-> - If an image field is the source, the target is treated as a custom subfield (See https://processwire.com/blog/posts/pw-3.0.142/ for info about image custom fields). If left empty, "description" is the default target.
-> - Repeater templates are automatically detected and labeled as "Repeater: fieldname" in the template dropdown.
-> - When processing repeaters, each repeater item is processed individually with the same prompt.
-> - The module supports both regular Repeater fields and Repeater Matrix fields.
+> - **Image & File fields**: Both work identically - the target field is treated as a custom subfield of the file/image (See https://processwire.com/blog/posts/pw-3.0.142/ for info about custom fields). If target is left empty, "description" is the default subfield.
+> - **Supported file formats**: PDF, RTF, Markdown (.md), JSON, XML, CSV, and plain text files.
+> - **File/Image processing**: Each file or image in the field is processed individually with the same prompt.
+> - **Repeater support**: Templates are automatically detected and labeled as "Repeater: fieldname" in the template dropdown.
+> - **Repeater processing**: Each repeater item is processed individually with the same prompt.
+> - **Compatibility**: The module supports both regular Repeater fields and Repeater Matrix fields.
 
 ### Supported field combinations / Examples:
 
@@ -106,24 +108,42 @@ PromptAI offers two button modes when editing pages:
    - Target Field: `alt_text`
    - Prompt: `Create a short alt-text for this image`
 
+5. **Source file field → Target subfield:** Sends each file to the AI; results are saved in the specified custom subfield.  
+   - Template: `basic-page`
+   - Source Field: `documents`
+   - Target Field: `summary`
+   - Prompt: `Summarize the key points from this document`
+
+6. **Source file field → No target field:** Sends each file to the AI; results are saved in the file description.  
+   - Template: `basic-page`
+   - Source Field: `attachments`
+   - Target Field: (empty)
+   - Prompt: `Create a brief description of this document`
+
 #### Repeater Fields
 
-5. **Repeater text field processing:** Process text fields within repeater items.  
-   - Template: `Repeater: gallery` (automatically detected)
+7. **Repeater text field processing:** Process text fields within repeater items.  
+   - Template: `Repeater: gallery`
    - Source Field: `title`
    - Target Field: `description`
    - Prompt: `Create a compelling description based on this title`
 
-6. **Repeater image field processing:** Process image fields within repeater items.  
+8. **Repeater image field processing:** Process image fields within repeater items.  
    - Template: `Repeater: portfolio_items`
    - Source Field: `project_image`
    - Target Field: (empty - uses description)
    - Prompt: `Describe this portfolio image professionally`
 
-7. **Repeater Matrix field processing:** Process fields within repeater matrix items.  
-   - Template: `Repeater: content_blocks`
-   - Source Field: `heading`
-   - Target Field: `subheading`
-   - Prompt: `Create a catchy subheading for this section`
+9. **Repeater file field processing:** Process file fields within repeater items.  
+   - Template: `Repeater: resources`
+   - Source Field: `document`
+   - Target Field: `summary` (custom subfield)
+   - Prompt: `Extract the main topics from this document`
+
+10. **Repeater Matrix field processing:** Process fields within repeater matrix items.  
+    - Template: `Repeater: content_blocks`
+    - Source Field: `heading`
+    - Target Field: `subheading`
+    - Prompt: `Create a catchy subheading for this section`
 
 **Note:** This is a beta release. While it performs well in production, please test thoroughly before deploying. Report any bugs via GitHub issues to help improve the module.

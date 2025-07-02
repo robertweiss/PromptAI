@@ -8,6 +8,7 @@ use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Enums\AttachmentContentType;
 use NeuronAI\Chat\Attachments\Image;
+use NeuronAI\Chat\Attachments\Document;
 use NeuronAI\Exceptions\NeuronException;
 
 class PromptAI extends Process implements Module {
@@ -33,6 +34,7 @@ class PromptAI extends Process implements Module {
 
     private array $fileFieldTypes = [
         'ProcessWire\FieldtypeImage',
+        'ProcessWire\FieldtypeFile',
     ];
 
     public function ___execute() {
@@ -162,7 +164,7 @@ class PromptAI extends Process implements Module {
         $event->return = $actions;
     }
 
-    public function chat(string $prompt, bool $returnText = true, ?string $file = null): string|AssistantMessage|Message {
+    public function chat(string $prompt, bool $returnText = true, ?string $file = null, $fileType = 'image'): string|AssistantMessage|Message {
         if (!$prompt) {
             return '';
         }
@@ -172,12 +174,46 @@ class PromptAI extends Process implements Module {
             if ($file) {
                 $fileContents = file_get_contents($file);
                 $mimeType = mime_content_type($file);
+
                 if ($fileContents) {
-                    $message->addAttachment(
-                        new Image(
-                            base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType
-                        )
-                    );
+                    if ($fileType === 'image') {
+                        // Validate image MIME types
+                        $supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+                        if (!in_array($mimeType, $supportedImageTypes)) {
+                            throw new \Exception("Unsupported image type: {$mimeType}. Supported types: ".implode(', ', $supportedImageTypes));
+                        }
+
+                        $message->addAttachment(
+                            new Image(
+                                base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType
+                            )
+                        );
+                    } else {
+                        // Validate document MIME types
+                        $supportedDocTypes = [
+                            'application/pdf',
+                            'text/plain',
+                            'text/csv',
+                            'application/rtf',
+                            'text/rtf',
+                            'text/markdown',
+                            'application/json',
+                            'text/json',
+                            'application/xml',
+                            'text/xml'
+                        ];
+
+                        if (!in_array($mimeType, $supportedDocTypes)) {
+                            throw new \Exception("Unsupported document type: {$mimeType}. Supported types: ".implode(', ', $supportedDocTypes));
+                        }
+
+                        $message->addAttachment(
+                            new Document(
+                                base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType
+                            )
+                        );
+                    }
                 }
             }
             $response = $this->agent->chat($message);
@@ -239,11 +275,11 @@ class PromptAI extends Process implements Module {
         if (str_starts_with($template->name, 'repeater_')) {
             $repeaterFieldName = str_replace('repeater_', '', $template->name);
             $repeater = $page->get($repeaterFieldName);
-            
+
             if (!$repeater || !$repeater->count()) {
                 return;
             }
-            
+
             foreach ($repeater as $item) {
                 $this->processRepeaterItem($item, $promptMatrixEntity);
             }
@@ -275,20 +311,21 @@ class PromptAI extends Process implements Module {
     private function processRepeaterItem(Page $item, PromptMatrixEntity $promptMatrixEntity): void {
         $item->of(false);
         $fields = $item->template->fields;
-        
+
         // Find the right source field by ID
         $sourceField = $fields->get($promptMatrixEntity->sourceField);
-        
+
         if (!$sourceField) {
-            $this->error(__('Source field with ID ') . $promptMatrixEntity->sourceField . __(' does not exist in repeater template ') . $item->template->name);
+            $this->error(__('Source field with ID ').$promptMatrixEntity->sourceField.__(' does not exist in repeater template ').$item->template->name);
+
             return;
         }
-        
+
         // Process file field
         if (in_array(get_class($sourceField->type), $this->fileFieldTypes)) {
             $this->processFileField($sourceField, $item, $promptMatrixEntity);
         }
-        
+
         // Process text field
         if (in_array(get_class($sourceField->type), $this->textFieldTypes)) {
             $this->processTextField($sourceField, $item, $promptMatrixEntity);
@@ -341,13 +378,15 @@ class PromptAI extends Process implements Module {
 
         $page->of(false);
         /** @var PageImage $image */
-        foreach ($page->$fieldName as $image) {
-            $file = $image->width(800)->filename;
-            $result = $this->chat($promptMatrixEntity->prompt, true, $file);
+        foreach ($page->$fieldName as $file) {
+            $isImage = ((string)$field->type === 'FieldtypeImage');
+            $filePath = ($isImage) ? $file->width(800)->filename : $file->filename;
+            $attachmentType = ($isImage) ? 'image' : 'document';
+            $result = $this->chat($promptMatrixEntity->prompt, true, $filePath, $attachmentType);
 
             try {
-                $image->$targetSubfield = $result;
-                $image->save();
+                $file->$targetSubfield = $result;
+                $file->save();
             } catch (\Exception $e) {
                 $this->error($e->getMessage());
             }
@@ -502,8 +541,9 @@ class PromptAI extends Process implements Module {
     public function getFieldOptions() {
         $fieldsOptions = [];
         if (wire('fields')) {
+            /** @var Field $field */
             foreach (wire('fields') as $field) {
-                if ($field->flags && $field->flags === Field::flagSystem) {
+                if ($field->flags && ($field->flags === Field::flagSystem || $field->flags === 24)) {
                     continue;
                 }
                 if (!in_array(get_class($field->type), $this->textFieldTypes) && !in_array(get_class($field->type), $this->fileFieldTypes)) {
@@ -525,9 +565,6 @@ class PromptAI extends Process implements Module {
                 if (in_array($template->name, $this->adminTemplates)) {
                     continue;
                 }
-//                if ($template->flags && $template->flags === Template::flagSystem) {
-//                    continue;
-//                }
 
                 $label = $template->label ? $template->label.' ('.$template->name.')' : $template->name;
                 if (str_starts_with($template->name, 'repeater_')) {
