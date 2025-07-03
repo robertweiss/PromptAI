@@ -286,7 +286,11 @@ class PromptAI extends Process implements Module {
                 $this->processField($page, $promptMatrixEntity, $templateId);
             }
         } else {
-                $this->processField($page, $promptMatrixEntity, $page->template->id);
+            $this->processField($page, $promptMatrixEntity, $page->template->id);
+
+            foreach (PromptAIHelper::getRepeaterTemplateIdsForPage($page) as $templateId) {
+                $this->processField($page, $promptMatrixEntity, $templateId);
+            }
         }
     }
 

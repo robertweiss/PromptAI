@@ -239,6 +239,25 @@ class PromptAIHelper {
         return $templatesOptions;
     }
 
+    public static function getRepeaterTemplateIdsForPage(Page $page) {
+        $templatesIds = [];
+        if (wire('templates')) {
+            foreach (wire('templates') as $template) {
+                if (!str_starts_with($template->name, 'repeater_')) {
+                    continue;
+                }
+
+                $name = str_replace('repeater_', '', $template->name);
+
+                if ($page->$name) {
+                    $templatesIds[] = $template->id;
+                }
+            }
+        }
+
+        return $templatesIds;
+    }
+
     /**
      * Check if a template configuration matches a given template ID
      * Template configuration is always an array or null (for all templates)
