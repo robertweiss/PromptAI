@@ -85,13 +85,22 @@ class PromptAIConfig extends ModuleConfig {
                 'label' => $this->_('System prompt'),
                 'description' => $this->_('This text will be used as the system prompt for the AI. It will be prepended to all AI calls set below'),
                 'notes' => $this->_('Optional'),
-                'collapsed' => Inputfield::collapsedYes,
+                'collapsed' => Inputfield::collapsedBlank,
                 'columnWidth' => 100,
             ])
         );
 
         $inputfields->add(
-            $this->buildInputField('InputfieldTextarea', [
+            $this->buildInputField('InputfieldMarkup', [
+                'name+id' => 'promptMatrixHint',
+                'label' => $this->_('Prompts'),
+                'description' => $this->_('→ Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),
+                'columnWidth' => 100,
+            ])
+        );
+
+        $inputfields->add(
+            $this->buildInputField('InputfieldHidden', [
                 'name+id' => 'promptMatrix',
                 'label' => $this->_('Prompts'),
                 'description' => $this->_('Prompt configurations are stored in JSON format with template and field IDs. Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),
@@ -101,7 +110,7 @@ class PromptAIConfig extends ModuleConfig {
         );
 
         if (wire('input')->post('promptMatrix')) {
-            wire()->modules('PromptAI')->parsePromptMatrix(wire('input')->post('promptMatrix'), true);
+            PromptAIHelper::parsePromptMatrix(wire('input')->post('promptMatrix'), true);
         }
 
         $inputfields->add(

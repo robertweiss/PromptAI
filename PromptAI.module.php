@@ -2,6 +2,7 @@
 
 require_once __DIR__.'/PromptAIAgent.php';
 require_once __DIR__.'/PromptAIConfigForm.php';
+require_once __DIR__.'/PromptAIHelper.php';
 
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Chat\Messages\AssistantMessage;
@@ -22,22 +23,6 @@ class PromptAI extends Process implements Module {
     private int $throttleSave;
     private bool $overwriteTarget;
 
-    private array $adminTemplates = ['admin', 'language', 'user', 'permission', 'role'];
-
-    private array $textFieldTypes = [
-        'ProcessWire\FieldtypePageTitle',
-        'ProcessWire\FieldtypePageTitleLanguage',
-        'ProcessWire\FieldtypeText',
-        'ProcessWire\FieldtypeTextarea',
-        'ProcessWire\FieldtypeTextLanguage',
-        'ProcessWire\FieldtypeTextareaLanguage',
-    ];
-
-    private array $fileFieldTypes = [
-        'ProcessWire\FieldtypeImage',
-        'ProcessWire\FieldtypeFile',
-    ];
-
     public function ___execute() {
         $configForm = new PromptAIConfigForm();
 
@@ -52,10 +37,10 @@ class PromptAI extends Process implements Module {
 
     public function upgrade($fromVersion, $toVersion) {
         if ($fromVersion < 12 && $toVersion >= 12) {
-            $this->migratePromptMatrix();
+            PromptAIHelper::migratePromptMatrix($this);
         }
         if ($fromVersion < 15 && $toVersion >= 15) {
-            $this->migrateTemplateToArray();
+            PromptAIHelper::migrateTemplateToArray($this);
         }
     }
 
@@ -109,7 +94,7 @@ class PromptAI extends Process implements Module {
         }
 
         $this->initAgent();
-        $this->promptMatrix = $this->parsePromptMatrix($this->promptMatrixString);
+        $this->promptMatrix = PromptAIHelper::parsePromptMatrix($this->promptMatrixString);
 
         // Let’s go!
         // Check if a specific prompt should be processed
@@ -127,14 +112,16 @@ class PromptAI extends Process implements Module {
         $page = $this->pages->get($this->input->get->id);
 
         // Don’t show option in admin templates
-        if (in_array($page->template->name, $this->adminTemplates)) {
+        if (in_array($page->template->name, PromptAIHelper::$adminTemplates)) {
             return;
         }
 
-        $this->promptMatrix = $this->parsePromptMatrix($this->promptMatrixString);
+        $this->promptMatrix = PromptAIHelper::parsePromptMatrix($this->promptMatrixString);
 
-        // Only show option if promptMatrix has page template or if there is a wildcard prompt
-        if (!$this->showDropdownForThisPage($page)) {
+        // Check if there are relevant prompts for this page
+        $relevantPrompts = PromptAIHelper::getRelevantPrompts($page, $this->promptMatrix);
+
+        if (count($relevantPrompts) === 0) {
             return;
         }
 
@@ -142,9 +129,6 @@ class PromptAI extends Process implements Module {
 
         // Check if individual buttons are enabled
         if ($this->get('individualButtons')) {
-            // Add individual buttons for each relevant prompt configuration
-            $relevantPrompts = $this->getRelevantPrompts($page);
-
             foreach ($relevantPrompts as $index => $promptEntity) {
                 $label = $promptEntity->label ?: __('Send to AI');
                 $buttonLabel = "%s + ".$label;
@@ -263,30 +247,53 @@ class PromptAI extends Process implements Module {
 
     private function processPrompts(Page $page): void {
         foreach ($this->promptMatrix as $promptMatrixEntity) {
-            if (!$this->templateMatches($promptMatrixEntity->template, $page->template->id)) {
+            if (!PromptAIHelper::templateMatches($promptMatrixEntity->template, $page->template->id)) {
                 continue;
             }
 
-            $this->processField($page, $promptMatrixEntity);
+            $this->processFields($page, $promptMatrixEntity);
         }
     }
 
-    /**
-     * Check if a template configuration matches a given template ID
-     * Template configuration is always an array or null (for all templates)
-     */
-    private function templateMatches($configTemplate, int $pageTemplateId): bool {
-        if ($configTemplate === null || empty($configTemplate)) {
-            return true; // null/empty means all templates
+    private function processSpecificPrompt(Page $page, int $promptIndex): void {
+        if (!isset($this->promptMatrix[$promptIndex])) {
+            $this->error(__('Invalid prompt configuration index'));
+
+            return;
         }
 
-        return is_array($configTemplate) && in_array($pageTemplateId, $configTemplate);
+        $promptMatrixEntity = $this->promptMatrix[$promptIndex];
+        $relevantPrompts = PromptAIHelper::getRelevantPrompts($page, $this->promptMatrix);
+        $isAllowedPrompt = false;
+        foreach ($relevantPrompts as $promptEntity) {
+            if ($promptEntity === $promptMatrixEntity) {
+                $isAllowedPrompt = true;
+            }
+        }
+        // Check if this prompt applies to the current template
+        if (!$isAllowedPrompt) {
+            $this->error(__('This prompt configuration does not apply to the current template'));
+
+            return;
+        }
+
+        $this->processFields($page, $promptMatrixEntity);
     }
 
-    private function processField(Page $page, PromptMatrixEntity $promptMatrixEntity): void {
+    private function processFields(Page $page, PromptMatrixEntity $promptMatrixEntity): void {
+        if ($promptMatrixEntity->template) {
+            foreach ($promptMatrixEntity->template as $templateId) {
+                $this->processField($page, $promptMatrixEntity, $templateId);
+            }
+        } else {
+                $this->processField($page, $promptMatrixEntity, $page->template->id);
+        }
+    }
+
+    private function processField(Page $page, PromptMatrixEntity $promptMatrixEntity, int $templateId): void {
         $page->of(false);
         // Template can differ from Page template when a repeater field is set as template
-        $template = wire('templates')->get($promptMatrixEntity->template);
+        $template = wire('templates')->get($templateId);
 
         // Handle Repeater fields
         if (str_starts_with($template->name, 'repeater_')) {
@@ -315,12 +322,12 @@ class PromptAI extends Process implements Module {
         }
 
         // Process file field
-        if (in_array(get_class($sourceField->type), $this->fileFieldTypes)) {
+        if (in_array(get_class($sourceField->type), PromptAIHelper::$fileFieldTypes)) {
             $this->processFileField($sourceField, $page, $promptMatrixEntity);
         }
 
         // Process text field
-        if (in_array(get_class($sourceField->type), $this->textFieldTypes)) {
+        if (in_array(get_class($sourceField->type), PromptAIHelper::$textFieldTypes)) {
             $this->processTextField($sourceField, $page, $promptMatrixEntity);
         }
     }
@@ -339,12 +346,12 @@ class PromptAI extends Process implements Module {
         }
 
         // Process file field
-        if (in_array(get_class($sourceField->type), $this->fileFieldTypes)) {
+        if (in_array(get_class($sourceField->type), PromptAIHelper::$fileFieldTypes)) {
             $this->processFileField($sourceField, $item, $promptMatrixEntity);
         }
 
         // Process text field
-        if (in_array(get_class($sourceField->type), $this->textFieldTypes)) {
+        if (in_array(get_class($sourceField->type), PromptAIHelper::$textFieldTypes)) {
             $this->processTextField($sourceField, $item, $promptMatrixEntity);
         }
     }
@@ -402,7 +409,7 @@ class PromptAI extends Process implements Module {
         /** @var PageImage $image */
         foreach ($page->$fieldName as $file) {
             // Check if target subfield already has content and overwrite is disabled
-            if (!$this->overwriteTarget && (string) $file->$targetSubfield) {
+            if (!$this->overwriteTarget && (string)$file->$targetSubfield) {
                 continue;
             }
 
@@ -418,307 +425,5 @@ class PromptAI extends Process implements Module {
                 $this->error($e->getMessage());
             }
         }
-    }
-
-    public function parsePromptMatrix(?string $promptMatrixString = '', $showErrors = false): array {
-        $promptMatrix = [];
-
-        // If empty, return empty array
-        if (empty($promptMatrixString)) {
-            return $promptMatrix;
-        }
-
-        // Parse JSON format (new format)
-        $jsonData = json_decode($promptMatrixString, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
-            if ($showErrors) {
-                $this->error(__('Invalid JSON format in prompt configuration'));
-            }
-
-            return $promptMatrix;
-        }
-
-        $availableTemplates = $this->getTemplateOptions();
-        $availableFields = $this->getFieldOptions();
-
-        foreach ($jsonData as $index => $config) {
-            $promptMatrixEntity = new PromptMatrixEntity();
-            $promptMatrixEntity->template = $config['template'] ?? null;
-            $promptMatrixEntity->sourceField = $config['sourceField'] ?? null;
-            $promptMatrixEntity->targetField = $config['targetField'] ?? null;
-            $promptMatrixEntity->prompt = $config['prompt'] ?? null;
-            $promptMatrixEntity->label = $config['label'] ?? null;
-
-            // Validation
-            if (!$promptMatrixEntity->sourceField) {
-                if ($showErrors) {
-                    wire()->error(__('Source field is missing in configuration ').($index + 1));
-                }
-                continue;
-            }
-
-            if (!$promptMatrixEntity->prompt) {
-                if ($showErrors) {
-                    $this->error(__('Prompt is missing in configuration ').($index + 1));
-                }
-                continue;
-            }
-
-            // Validate template IDs exist (if set)
-            if ($promptMatrixEntity->template && is_array($promptMatrixEntity->template)) {
-                foreach ($promptMatrixEntity->template as $templateId) {
-                    if (!array_key_exists($templateId, $availableTemplates)) {
-                        if ($showErrors) {
-                            $this->error(__('Template ID ').$templateId.__(' does not exist in configuration ').($index + 1));
-                        }
-                        continue 2; // Skip this entire configuration
-                    }
-                }
-            }
-
-            // Validate source field ID exists
-            if (!array_key_exists($promptMatrixEntity->sourceField, $availableFields)) {
-                if ($showErrors) {
-                    $this->error(__('Source field ID does not exist in configuration ').($index + 1));
-                }
-                continue;
-            }
-
-            // Validate target field ID exists (if set)
-            if ($promptMatrixEntity->targetField && !array_key_exists($promptMatrixEntity->targetField, $availableFields)) {
-                if ($showErrors) {
-                    $this->error(__('Target field ID does not exist in configuration ').($index + 1));
-                }
-                continue;
-            }
-
-            $promptMatrix[] = $promptMatrixEntity;
-        }
-
-        ray($promptMatrix);
-
-        return $promptMatrix;
-    }
-
-    private function migratePromptMatrix(): void {
-        $currentConfig = $this->get('promptMatrix');
-
-        if (empty($currentConfig)) {
-            return;
-        }
-
-        // Check if already in JSON format
-        $jsonData = json_decode($currentConfig, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
-            return; // Already migrated
-        }
-
-        // Parse old format and convert to new JSON format
-        $newConfig = [];
-        $promptMatrixRows = array_filter(array_map('trim', explode("\n", $currentConfig)));
-
-        foreach ($promptMatrixRows as $promptMatrixRow) {
-            $parts = explode('::', $promptMatrixRow);
-
-            $templateName = $parts[0] ?? '';
-            $sourceFieldName = $parts[1] ?? '';
-            $targetFieldName = $parts[2] ?? '';
-            $prompt = $parts[3] ?? '';
-            $label = $parts[4] ?? '';
-
-            // Skip if required fields are missing
-            if (empty($sourceFieldName) || empty($prompt)) {
-                continue;
-            }
-
-            // Convert names to IDs
-            $templateId = null;
-            if (!empty($templateName)) {
-                $template = wire('templates')->get($templateName);
-                $templateId = $template ? $template->id : null;
-            }
-
-            $sourceFieldId = null;
-            if (!empty($sourceFieldName)) {
-                $sourceField = wire('fields')->get($sourceFieldName);
-                $sourceFieldId = $sourceField ? $sourceField->id : null;
-            }
-
-            $targetFieldId = null;
-            if (!empty($targetFieldName)) {
-                $targetField = wire('fields')->get($targetFieldName);
-                $targetFieldId = $targetField ? $targetField->id : null;
-            }
-
-            // Only add if source field exists
-            if ($sourceFieldId) {
-                $newConfig[] = [
-                    'template' => $templateId,
-                    'sourceField' => $sourceFieldId,
-                    'targetField' => $targetFieldId,
-                    'prompt' => $prompt,
-                    'label' => $label,
-                ];
-            }
-        }
-
-        // Save new JSON format
-        $jsonConfig = json_encode($newConfig, JSON_PRETTY_PRINT);
-        $moduleConfig = wire('modules')->getConfig('PromptAI');
-        $moduleConfig['promptMatrix'] = $jsonConfig;
-        wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
-        $this->message(__('PromptAI configuration migrated to new format'));
-    }
-
-    private function migrateTemplateToArray(): void {
-        $currentConfig = $this->get('promptMatrix');
-
-        if (empty($currentConfig)) {
-            return;
-        }
-
-        // Parse JSON format
-        $jsonData = json_decode($currentConfig, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
-            return; // Invalid format, skip migration
-        }
-
-        $migrated = false;
-        foreach ($jsonData as &$config) {
-            // Check if template is a single integer and convert to array
-            if (isset($config['template']) && is_int($config['template'])) {
-                $config['template'] = [$config['template']];
-                $migrated = true;
-            }
-        }
-
-        // Save updated configuration if changes were made
-        if ($migrated) {
-            $jsonConfig = json_encode($jsonData, JSON_PRETTY_PRINT);
-            $moduleConfig = wire('modules')->getConfig('PromptAI');
-            $moduleConfig['promptMatrix'] = $jsonConfig;
-            wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
-            $this->message(__('PromptAI template configuration migrated to array format'));
-        }
-    }
-
-    public function getFieldOptions() {
-        $fieldsOptions = [];
-        if (wire('fields')) {
-            /** @var Field $field */
-            foreach (wire('fields') as $field) {
-                if ($field->flags && ($field->flags === Field::flagSystem || $field->flags === 24)) {
-                    continue;
-                }
-                if (!in_array(get_class($field->type), $this->textFieldTypes) && !in_array(get_class($field->type), $this->fileFieldTypes)) {
-                    continue;
-                }
-
-                $label = $field->label ? $field->label.' ('.$field->name.')' : $field->name;
-                $fieldsOptions[$field->id] = $label;
-            }
-        }
-
-        return $fieldsOptions;
-    }
-
-    public function getTemplateOptions() {
-        $templatesOptions = [];
-        if (wire('templates')) {
-            foreach (wire('templates') as $template) {
-                if (in_array($template->name, $this->adminTemplates)) {
-                    continue;
-                }
-
-                $label = $template->label ? $template->label.' ('.$template->name.')' : $template->name;
-                if (str_starts_with($template->name, 'repeater_')) {
-                    $name = str_replace('repeater_', '', $template->name);
-                    $label = 'Repeater: '.$name;
-                }
-                $templatesOptions[$template->id] = $label;
-            }
-        }
-
-        return $templatesOptions;
-    }
-
-    private function showDropdownForThisPage(Page $page): bool {
-        $template = $page ? $page->template : null;
-        foreach ($this->promptMatrix as $promptMatrixEntity) {
-            // Check regular template matches first
-            if ($this->templateMatches($promptMatrixEntity->template, $template->id)) {
-                return true;
-            }
-            
-            // Check repeater templates
-            if (is_array($promptMatrixEntity->template)) {
-                foreach ($promptMatrixEntity->template as $templateId) {
-                    $entityTemplate = wire('templates')->get($templateId);
-                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'repeater_')) {
-                        $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
-                        if ($page->$repeaterName) {
-                            return true;
-                        }
-                    }
-                }
-            }
-        }
-
-        return false;
-    }
-
-    private function getRelevantPrompts(Page $page): array {
-        $template = $page ? $page->template : null;
-
-        $relevantPrompts = [];
-        foreach ($this->promptMatrix as $index => $promptMatrixEntity) {
-            if ($this->templateMatches($promptMatrixEntity->template, $template->id)) {
-                $relevantPrompts[$index] = $promptMatrixEntity;
-                continue;
-            }
-
-            // Handle repeater templates
-            if (is_array($promptMatrixEntity->template)) {
-                foreach ($promptMatrixEntity->template as $templateId) {
-                    $entityTemplate = wire('templates')->get($templateId);
-                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'repeater_')) {
-                        $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
-                        if ($page->$repeaterName) {
-                            $relevantPrompts[$index] = $promptMatrixEntity;
-                            break; // Found a matching repeater, no need to check others
-                        }
-                    }
-                }
-            }
-        }
-
-        return $relevantPrompts;
-    }
-
-    private function processSpecificPrompt(Page $page, int $promptIndex): void {
-        if (!isset($this->promptMatrix[$promptIndex])) {
-            $this->error(__('Invalid prompt configuration index'));
-
-            return;
-        }
-
-        $promptMatrixEntity = $this->promptMatrix[$promptIndex];
-        $relevantPrompts = $this->getRelevantPrompts($page);
-        $isAllowedPrompt = false;
-        foreach ($relevantPrompts as $promptEntity) {
-            if ($promptEntity === $promptMatrixEntity) {
-                $isAllowedPrompt = true;
-            }
-        }
-        // Check if this prompt applies to the current template
-        if (!$isAllowedPrompt) {
-            $this->error(__('This prompt configuration does not apply to the current template'));
-
-            return;
-        }
-
-        $this->processField($page, $promptMatrixEntity);
     }
 }

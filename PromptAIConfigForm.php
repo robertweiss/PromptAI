@@ -1,5 +1,6 @@
 <?php namespace ProcessWire;
 
+require_once __DIR__.'/PromptAIHelper.php';
 class PromptAIConfigForm {
     private Module $promptAI;
     private array $promptMatrix;
@@ -7,7 +8,7 @@ class PromptAIConfigForm {
     public function __construct() {
         /** @var Module promptAI */
         $this->promptAI = wire('modules')->get('PromptAI');
-        $this->promptMatrix = $this->promptAI->parsePromptMatrix($this->promptAI->get('promptMatrix'));
+        $this->promptMatrix = PromptAIHelper::parsePromptMatrix($this->promptAI->get('promptMatrix'));
     }
 
     public function render(): string {
@@ -115,7 +116,7 @@ class PromptAIConfigForm {
         $field->notes = _('(leave empty for all templates)');
         $field->class = 'uk-select';
         $field->attr(['x-model' => 'fieldset.template']);
-        $field->options = ['' => _('-- All Templates --')] + $this->promptAI->getTemplateOptions();
+        $field->options = PromptAIHelper::getTemplateOptions();
         $field->columnWidth = 50;
         $fieldset->add($field);
 
@@ -125,7 +126,7 @@ class PromptAIConfigForm {
         $field->label = _('Source Field');
         $field->notes = _('(required)');
         $field->attr(['x-model' => 'fieldset.sourceField', 'required' => 'required']);
-        $field->options = ['' => _('-- Select Source Field --')] + $this->promptAI->getFieldOptions();
+        $field->options = ['' => _('-- Select Source Field --')] + PromptAIHelper::getFieldOptions();
         $field->columnWidth = 50;
         $fieldset->add($field);
 
@@ -135,7 +136,7 @@ class PromptAIConfigForm {
         $field->label = _('Target Field');
         $field->notes = _('(leave empty to use source field)');
         $field->attr(['x-model' => 'fieldset.targetField']);
-        $field->options = ['' => _('-- Use Source Field --')] + $this->promptAI->getFieldOptions();
+        $field->options = ['' => _('-- Use Source Field --')] + PromptAIHelper::getFieldOptions();
         $field->columnWidth = 50;
         $fieldset->add($field);
 
@@ -214,11 +215,10 @@ class PromptAIConfigForm {
 
     public function processSubmission(): void {
         $input = wire('input');
-        ray($input->post);
 
         // Get the JSON data from the hidden field
         $configDataJson = $input->post->text('prompt_config_data', ['maxLength' => 0]);
-ray($configDataJson);
+
         if (empty($configDataJson)) {
             wire('session')->error(_('No configuration data received.'));
             return;
