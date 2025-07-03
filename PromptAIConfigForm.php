@@ -111,7 +111,7 @@ class PromptAIConfigForm {
 
         // Fieldset Template
         /** @var InputfieldSelect $field */
-        $field = $fieldset->InputfieldSelectMultiple;
+        $field = $fieldset->InputfieldAsmSelect;
         $field->label = _('Template(s)');
         $field->notes = _('(leave empty for all templates)');
         $field->class = 'uk-select';
@@ -169,7 +169,7 @@ class PromptAIConfigForm {
         // If no existing data, start with one empty fieldset
         if (empty($initialData)) {
             $initialData[] = [
-                'template' => [], // Empty array for AsmSelect
+                'template' => [],
                 'sourceField' => '',
                 'targetField' => '',
                 'prompt' => '',
@@ -184,21 +184,82 @@ class PromptAIConfigForm {
         function promptConfigForm() {
             return {
                 fieldsets: {$initialDataJson},
+                init() {
+                    this.setupAsmSelectListener();
+                },
+                setupListener() {
+                    const self = this;
+                    // Find all select elements with x-model containing 'template'
+                    $('select[x-model*=\"template\"]').off('change.asmAlpine').on('change.asmAlpine', function(e, data) {
+                        const target = this;
+                        const xModel = target.getAttribute('x-model');
+                        
+                        if (xModel === 'fieldset.template') {
+                            // Find the fieldset index by looking at the DOM structure
+                            // Each fieldset is wrapped in a .prompt-ai-config--item container
+                            const fieldsetContainer = target.closest('.prompt-ai-config--item');
+                            if (fieldsetContainer) {
+                                // Get all fieldset containers and find the index of this one
+                                const allFieldsetContainers = document.querySelectorAll('.prompt-ai-config--item');
+                                const fieldsetIndex = Array.from(allFieldsetContainers).indexOf(fieldsetContainer);
+                                
+                                if (fieldsetIndex !== -1 && self.fieldsets[fieldsetIndex]) {
+                                    // Get selected values from the select element
+                                    const selectedValues = Array.from(target.options)
+                                        .filter(option => option.selected)
+                                        .map(option => option.value);
+                                    self.fieldsets[fieldsetIndex].template = selectedValues;
+                                    
+                                    // Log for debugging
+//                                    console.log('asmSelect change detected:', {
+//                                        fieldsetIndex: fieldsetIndex,
+//                                        selectedValues: selectedValues,
+//                                        data: data // This contains the asmSelect event data
+//                                    });
+                                }
+                            }
+                        }
+                    });
+                },
+                setupAsmSelectListener() {
+                    // Set up listeners now and after DOM changes
+                    if (typeof $ !== 'undefined') {
+                        this.setupListener();
+                        // Also set up after a brief delay to catch any late-loading elements
+                        setTimeout(() => this.setupListener(), 100);
+                    }
+                },
                 addFieldset() {
                     this.fieldsets.push({
-                        template: [], // Empty array for AsmSelect
+                        template: [],
                         sourceField: '',
                         targetField: '',
                         prompt: '',
                         label: ''
                     });
                     
-                    // Scroll to the new fieldset after it's been added to the DOM
+                    // Initialize new asmSelect fields and scroll after DOM update
                     setTimeout(() => {
-                        const newFieldsets = document.querySelectorAll('.prompt-ai-config--item');
-                        const lastFieldset = newFieldsets[newFieldsets.length - 1];
-                        if (lastFieldset) {
-                            lastFieldset.scrollIntoView({ 
+                        const fieldsetsEls = document.querySelectorAll('.prompt-ai-config--item');
+                        const lastFieldsetEl = fieldsetsEls[fieldsetsEls.length - 1];
+                        
+                        if (lastFieldsetEl) {
+                            // Initialize any new InputfieldAsmSelect elements in the new fieldset
+                            const newAsmSelects = lastFieldsetEl.querySelectorAll('.InputfieldAsmSelect select[multiple]');
+                            newAsmSelects.forEach(select => {
+                                if (typeof initInputfieldAsmSelect === 'function') {
+                                    // ProcessWire's initInputfieldAsmSelect expects a jQuery object
+                                    initInputfieldAsmSelect($(select));
+                                }
+                            });
+                            
+                            // Refresh the global event listeners to include new elements
+                            setTimeout(() => {
+                                this.setupListener();
+                            }, 50);
+                            
+                            // Scroll to the new fieldset
+                            lastFieldsetEl.scrollIntoView({ 
                                 behavior: 'smooth', 
                                 block: 'center' 
                             });
