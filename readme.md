@@ -48,7 +48,7 @@ Navigate to **Setup > Prompt AI** to configure your AI prompts using the visual 
 Each prompt configuration consists of:
 
 - **Label**: Optional identifier for easy recognition
-- **Template**: The template this prompt applies to (leave empty for all templates, or select a repeater template to process repeater fields)
+- **Template(s)**: The template(s) this prompt applies to (leave empty for all templates, select multiple templates to apply to specific templates, or select a repeater template to process repeater fields)
 - **Source Field**: The field whose content is sent to the AI
 - **Target Field**: Where the AI result is saved (leave empty to overwrite the source field)
 - **Prompt**: Instructions for the AI (prefixed to the source field content)
@@ -73,6 +73,17 @@ PromptAI offers two button modes when editing pages:
 - Only the selected prompt configuration is processed when clicked
 - Useful for selective AI processing and better user control
 
+#### Template Selection
+
+The **Template(s)** field supports flexible template targeting:
+
+- **Empty selection**: Prompt applies to all templates (universal prompt)
+- **Single template**: Prompt applies only to pages using that specific template
+- **Multiple templates**: Prompt applies to pages using any of the selected templates
+- **Repeater templates**: Select repeater templates (labeled as "Repeater: fieldname") to process fields within repeater items
+
+This allows you to create template-specific prompts or prompts that work across multiple related templates.
+
 #### Content Overwrite Protection
 
 The **"Overwrite Target Field Content"** setting controls how the module handles existing content:
@@ -93,37 +104,37 @@ The **"Overwrite Target Field Content"** setting controls how the module handles
 #### Regular Page Fields
 
 1. **Source text field → Target text field:** Overwrites target field with the result.  
-   - Template: `basic-page`
+   - Template(s): `basic-page`
    - Source Field: `copy`
    - Target Field: `copy2`
    - Prompt: `Create a summary of the following text`
 
 2. **Source text field → No target field:** Overwrites source field with the result.  
-   - Template: `basic-page`
+   - Template(s): `basic-page`
    - Source Field: `copy`
    - Target Field: (empty)
    - Prompt: `Add an emoji to the following text`
 
 3. **Source image field → No target field:** Sends each image to the AI; results are saved in the image description.  
-   - Template: `basic-page`
+   - Template(s): `basic-page`
    - Source Field: `images`
    - Target Field: (empty)
    - Prompt: `Create a short alt-text for this image`
 
 4. **Source image field → Target subfield:** Sends each image to the AI; results are saved in the specified custom field.  
-   - Template: `basic-page`
+   - Template(s): `basic-page`
    - Source Field: `images`
    - Target Field: `alt_text`
    - Prompt: `Create a short alt-text for this image`
 
 5. **Source file field → Target subfield:** Sends each file to the AI; results are saved in the specified custom subfield.  
-   - Template: `basic-page`
+   - Template(s): `basic-page`
    - Source Field: `documents`
    - Target Field: `summary`
    - Prompt: `Summarize the key points from this document`
 
 6. **Source file field → No target field:** Sends each file to the AI; results are saved in the file description.  
-   - Template: `basic-page`
+   - Template(s): `basic-page`
    - Source Field: `attachments`
    - Target Field: (empty)
    - Prompt: `Create a brief description of this document`
@@ -131,27 +142,33 @@ The **"Overwrite Target Field Content"** setting controls how the module handles
 #### Repeater Fields
 
 7. **Repeater text field processing:** Process text fields within repeater items.  
-   - Template: `Repeater: gallery`
+   - Template(s): `Repeater: gallery`
    - Source Field: `title`
    - Target Field: `description`
    - Prompt: `Create a compelling description based on this title`
 
 8. **Repeater image field processing:** Process image fields within repeater items.  
-   - Template: `Repeater: portfolio_items`
+   - Template(s): `Repeater: portfolio_items`
    - Source Field: `project_image`
    - Target Field: (empty - uses description)
    - Prompt: `Describe this portfolio image professionally`
 
 9. **Repeater file field processing:** Process file fields within repeater items.  
-   - Template: `Repeater: resources`
+   - Template(s): `Repeater: resources`
    - Source Field: `document`
    - Target Field: `summary` (custom subfield)
    - Prompt: `Extract the main topics from this document`
 
 10. **Repeater Matrix field processing:** Process fields within repeater matrix items.  
-    - Template: `Repeater: content_blocks`
+    - Template(s): `Repeater: content_blocks`
     - Source Field: `heading`
     - Target Field: `subheading`
     - Prompt: `Create a catchy subheading for this section`
+
+11. **Multi-template text processing:** Apply the same prompt to multiple templates.  
+    - Template(s): `basic-page`, `blog-post`, `product-page`
+    - Source Field: `title`
+    - Target Field: `seo_title`
+    - Prompt: `Create an SEO-optimized title based on this page title`
 
 **Note:** This is a beta release. While it performs well in production, please test thoroughly before deploying. Report any bugs via GitHub issues to help improve the module.

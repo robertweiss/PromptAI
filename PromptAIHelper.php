@@ -227,6 +227,10 @@ class PromptAIHelper {
                     continue;
                 }
 
+                if (str_starts_with($template->name, 'field-')) {
+                    continue;
+                }
+
                 $label = $template->label ? $template->label.' ('.$template->name.')' : $template->name;
                 if (str_starts_with($template->name, 'repeater_')) {
                     $name = str_replace('repeater_', '', $template->name);

@@ -412,6 +412,12 @@ class PromptAI extends Process implements Module {
         $page->of(false);
         /** @var PageImage $image */
         foreach ($page->$fieldName as $file) {
+            if ($file->$targetSubfield === null) {
+                $this->error(__('Target subfield ').$targetSubfield.__(' does not exist in field ').$fieldName);
+
+                break;
+            }
+
             // Check if target subfield already has content and overwrite is disabled
             if (!$this->overwriteTarget && (string)$file->$targetSubfield) {
                 continue;
