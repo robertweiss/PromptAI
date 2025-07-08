@@ -6,6 +6,7 @@ class PromptMatrixEntity {
     public ?int $targetField;
     public ?string $prompt;
     public ?string $label;
+    public ?bool $overwriteTarget;
 }
 
 class PromptAIConfig extends ModuleConfig {
@@ -63,7 +64,7 @@ class PromptAIConfig extends ModuleConfig {
                 'name+id' => 'model',
                 'label' => $this->_('AI Model'),
                 'description' => $this->_('Which AI model should be used?'),
-                'notes' => $this->_("Anthropic: https://docs.anthropic.com/en/docs/about-claude/models/all-models\n OpenAI: https://platform.openai.com/docs/models\nGemini: https://ai.google.dev/gemini-api/docs/models"),
+                'notes' => $this->_("[Anthropic](https://docs.anthropic.com/en/docs/about-claude/models/all-models),  [OpenAI](https://platform.openai.com/docs/models), [Gemini](https://ai.google.dev/gemini-api/docs/models)"),
                 'columnWidth' => 33,
             ])
         );
@@ -73,7 +74,7 @@ class PromptAIConfig extends ModuleConfig {
                 'name+id' => 'apiKey',
                 'label' => $this->_('API Key'),
                 'description' => $this->_('You need an API key to use this module.'),
-                'notes' => $this->_("Anthropic: https://console.anthropic.com/settings/keys\nOpenAI: https://platform.openai.com/account/api-keys\nGemini: https://aistudio.google.com/apikey"),
+                'notes' => $this->_("[Anthropic](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/account/api-keys), [Gemini](https://aistudio.google.com/apikey)"),
                 'columnWidth' => 34,
                 'required' => false,
             ])
@@ -83,18 +84,32 @@ class PromptAIConfig extends ModuleConfig {
             $this->buildInputField('InputfieldTextArea', [
                 'name+id' => 'systemPrompt',
                 'label' => $this->_('System prompt'),
-                'description' => $this->_('This text will be used as the system prompt for the AI. It will be prepended to all AI calls set below'),
+                'description' => $this->_('This text will be used as the system prompt for the AI. It will be prepended to all AI calls.'),
                 'notes' => $this->_('Optional'),
-                'collapsed' => Inputfield::collapsedBlank,
-                'columnWidth' => 100,
+                'columnWidth' => 66,
             ])
         );
 
+        $configLabel = $this->_('Prompt Configuration');
+        $configUrl = wire('urls')->admin . 'setup/prompt-ai/';
+        $configLink = "[{$configLabel}]($configUrl)";
         $inputfields->add(
             $this->buildInputField('InputfieldMarkup', [
                 'name+id' => 'promptMatrixHint',
                 'label' => $this->_('Prompts'),
-                'description' => $this->_('→ Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),
+                'description' => $this->_('Use the visual configuration interface to manage your prompts: ') . $configLink,
+                'columnWidth' => 34,
+            ])
+        );
+
+        $inputfields->add(
+            $this->buildInputField('InputfieldCheckbox', [
+                'name+id' => 'individualButtons',
+                'label' => $this->_('Individual prompt buttons'),
+                'description' => $this->_('Show separate "Send to AI" buttons for each prompt configuration instead of one general button.'),
+                'notes' => $this->_('When enabled, each prompt configuration will have its own button labeled with the configuration\'s label (or "Send to AI" as fallback)'),
+                'value' => 1,
+                'checked' => '',
                 'columnWidth' => 100,
             ])
         );
@@ -114,25 +129,14 @@ class PromptAIConfig extends ModuleConfig {
         }
 
         $inputfields->add(
-            $this->buildInputField('InputfieldCheckbox', [
-                'name+id' => 'individualButtons',
-                'label' => $this->_('Individual prompt buttons'),
-                'description' => $this->_('Show separate "Send to AI" buttons for each prompt configuration instead of one general button'),
-                'notes' => $this->_('When enabled, each prompt configuration will have its own button labeled with the configuration\'s label (or "Send to AI" as fallback)'),
-                'value' => 1,
-                'checked' => '',
-                'columnWidth' => 50,
-            ])
-        );
-
-        $inputfields->add(
-            $this->buildInputField('InputfieldCheckbox', [
+            $this->buildInputField('InputfieldHidden', [
                 'name+id' => 'overwriteTarget',
-                'label' => $this->_('Overwrite target field content'),
-                'description' => $this->_('If toggled on, the target field will be overwritten with the AI response. If toggled off, the AI response will only be written if the target field is empty.'),
+                'label' => $this->_('Overwrite target field content (deprecated)'),
+                'description' => $this->_('This global setting is deprecated. Use the per-prompt "Overwrite target field content" setting in the Prompt AI configuration instead.'),
+                'notes' => $this->_('This setting will be removed in a future version. Please configure overwrite behavior individually for each prompt.'),
                 'value' => 0,
                 'checked' => '',
-                'columnWidth' => 50,
+                'columnWidth' => 100,
             ])
         );
 

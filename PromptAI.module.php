@@ -42,6 +42,9 @@ class PromptAI extends Process implements Module {
         if ($fromVersion < 15 && $toVersion >= 15) {
             PromptAIHelper::migrateTemplateToArray($this);
         }
+        if ($fromVersion < 16 && $toVersion >= 16) {
+            PromptAIHelper::migrateOverwriteTargetToPrompts($this);
+        }
     }
 
     public function init() {
@@ -383,7 +386,7 @@ class PromptAI extends Process implements Module {
         }
 
         // Check if target field already has content and overwrite is disabled
-        if (!$this->overwriteTarget && (string)$page->get($target)) {
+        if (!$promptMatrixEntity->overwriteTarget && (string)$page->get($target)) {
             return;
         }
 
@@ -419,7 +422,7 @@ class PromptAI extends Process implements Module {
             }
 
             // Check if target subfield already has content and overwrite is disabled
-            if (!$this->overwriteTarget && (string)$file->$targetSubfield) {
+            if (!$promptMatrixEntity->overwriteTarget && (string)$file->$targetSubfield) {
                 continue;
             }
 

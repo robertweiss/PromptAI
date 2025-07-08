@@ -121,6 +121,41 @@ class PromptAIHelper {
         }
     }
 
+    public static function migrateOverwriteTargetToPrompts(PromptAI $module): void {
+        $moduleConfig = wire('modules')->getConfig('PromptAI');
+        $currentConfig = $moduleConfig['promptMatrix'] ?? '';
+        $globalOverwriteTarget = (bool)($moduleConfig['overwriteTarget'] ?? false);
+
+        if (empty($currentConfig)) {
+            return;
+        }
+
+        // Parse JSON format
+        $jsonData = json_decode($currentConfig, true);
+        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
+            return; // Invalid format, skip migration
+        }
+
+        $migrated = false;
+        foreach ($jsonData as &$config) {
+            // Only migrate if overwriteTarget is not already set
+            if (!isset($config['overwriteTarget'])) {
+                $config['overwriteTarget'] = $globalOverwriteTarget;
+                $migrated = true;
+            }
+        }
+
+        // Save updated configuration if changes were made
+        if ($migrated) {
+            $jsonConfig = json_encode($jsonData, JSON_PRETTY_PRINT);
+            $moduleConfig = wire('modules')->getConfig('PromptAI');
+            $moduleConfig['promptMatrix'] = $jsonConfig;
+            wire('modules')->saveConfig('PromptAI', $moduleConfig);
+
+            $module->message(__('PromptAI overwriteTarget configuration migrated to per-prompt setting'));
+        }
+    }
+
     public static function parsePromptMatrix(?string $promptMatrixString = '', $showErrors = false): array {
         $promptMatrix = [];
 
@@ -149,6 +184,7 @@ class PromptAIHelper {
             $promptMatrixEntity->targetField = $config['targetField'] ?? null;
             $promptMatrixEntity->prompt = $config['prompt'] ?? null;
             $promptMatrixEntity->label = $config['label'] ?? null;
+            $promptMatrixEntity->overwriteTarget = $config['overwriteTarget'] ?? false;
 
             // Validation
             if (!$promptMatrixEntity->sourceField) {

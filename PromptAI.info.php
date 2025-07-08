@@ -3,7 +3,7 @@
 $info = [
     'title' => 'PromptAI',
     'summary' => 'Send a prompt and the content of a text field to an AI and save the result into a(nother) text field.',
-    'version' => 15,
+    'version' => 16,
     'author' => 'Robert Weiss',
     'icon' => 'magic',
     'requires' => [

@@ -1,6 +1,7 @@
 <?php namespace ProcessWire;
 
 require_once __DIR__.'/PromptAIHelper.php';
+
 class PromptAIConfigForm {
     private Module $promptAI;
     private array $promptMatrix;
@@ -36,9 +37,7 @@ class PromptAIConfigForm {
 
         // Wrap fieldset rendering in <template> for Alpine.js
         $fieldsetTemplate = '
-            <template x-for="(fieldset, index) in fieldsets" :key="index">'.
-                $this->createFieldset($form)->render()
-            .'</template>';
+            <template x-for="(fieldset, index) in fieldsets" :key="index">'.$this->createFieldset($form)->render().'</template>';
 
         $addFieldsetButton = '
             <a class="" href="#" x-on:click.prevent="addFieldset()">
@@ -106,7 +105,17 @@ class PromptAIConfigForm {
         $field->label = _('Label');
         $field->notes = _('(for identification, optional)');
         $field->attr(['x-model' => 'fieldset.label']);
-        $field->columnWidth = 50;
+        $field->columnWidth = 66;
+        $fieldset->add($field);
+
+                // Fieldset Overwrite Target
+        /** @var InputfieldCheckbox $field */
+        $field = $fieldset->InputfieldCheckbox;
+        $field->label = _('Overwrite target field content');
+        $field->description = '';
+        $field->notes = _('When unchecked, only fills empty fields');
+        $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
+        $field->columnWidth = 34;
         $fieldset->add($field);
 
         // Fieldset Template
@@ -117,7 +126,7 @@ class PromptAIConfigForm {
         $field->class = 'uk-select';
         $field->attr(['x-model' => 'fieldset.template']);
         $field->options = PromptAIHelper::getTemplateOptions();
-        $field->columnWidth = 50;
+        $field->columnWidth = 33;
         $fieldset->add($field);
 
         // Fieldset Source Field
@@ -127,7 +136,7 @@ class PromptAIConfigForm {
         $field->notes = _('(required)');
         $field->attr(['x-model' => 'fieldset.sourceField', 'required' => 'required']);
         $field->options = ['' => _('-- Select Source Field --')] + PromptAIHelper::getFieldOptions();
-        $field->columnWidth = 50;
+        $field->columnWidth = 33;
         $fieldset->add($field);
 
         // Fieldset Target Field
@@ -137,7 +146,7 @@ class PromptAIConfigForm {
         $field->notes = _('(leave empty to use source field)');
         $field->attr(['x-model' => 'fieldset.targetField']);
         $field->options = ['' => _('-- Use Source Field --')] + PromptAIHelper::getFieldOptions();
-        $field->columnWidth = 50;
+        $field->columnWidth = 34;
         $fieldset->add($field);
 
         // Fieldset Prompt
@@ -163,6 +172,7 @@ class PromptAIConfigForm {
                 'targetField' => $entity->targetField ?: '',
                 'prompt' => $entity->prompt ?: '',
                 'label' => $entity->label ?: '',
+                'overwriteTarget' => $entity->overwriteTarget ?? false,
             ];
         }
 
@@ -174,6 +184,7 @@ class PromptAIConfigForm {
                 'targetField' => '',
                 'prompt' => '',
                 'label' => '',
+                'overwriteTarget' => false,
             ];
         }
 
@@ -235,7 +246,8 @@ class PromptAIConfigForm {
                         sourceField: '',
                         targetField: '',
                         prompt: '',
-                        label: ''
+                        label: '',
+                        overwriteTarget: false
                     });
                     
                     // Initialize new asmSelect fields and scroll after DOM update
@@ -282,12 +294,14 @@ class PromptAIConfigForm {
 
         if (empty($configDataJson)) {
             wire('session')->error(_('No configuration data received.'));
+
             return;
         }
         // Parse the JSON data
         $configData = json_decode($configDataJson, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
             wire('session')->error(_('Invalid configuration data format.'));
+
             return;
         }
 
@@ -309,6 +323,7 @@ class PromptAIConfigForm {
             $targetField = !empty($config['targetField']) ? (int)$config['targetField'] : null;
             $prompt = $config['prompt'] ?? '';
             $label = $config['label'] ?? '';
+            $overwriteTarget = $config['overwriteTarget'] ?? false;
 
             $jsonConfig[] = [
                 'template' => $template,
@@ -316,6 +331,7 @@ class PromptAIConfigForm {
                 'targetField' => $targetField,
                 'prompt' => $prompt,
                 'label' => $label,
+                'overwriteTarget' => $overwriteTarget,
             ];
         }
 
@@ -326,7 +342,6 @@ class PromptAIConfigForm {
 
         $moduleConfig['promptMatrix'] = $promptMatrixString;
         $saveResult = wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
 
         if ($saveResult) {
             wire('session')->message(_('Prompt configuration saved successfully!'));
