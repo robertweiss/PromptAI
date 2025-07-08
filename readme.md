@@ -36,7 +36,6 @@ Configure these settings in the module configuration (Modules > Site > PromptAI 
 - **API Key** (required): Your API key for the selected provider
 - **System Prompt** (optional): A general instruction sent to the AI with every request
 - **Individual Prompt Buttons** (optional): Show separate "Send to AI" buttons for each prompt configuration instead of one general button
-- **Overwrite Target Field Content** (optional): Controls whether AI responses overwrite existing content in target fields (disabled by default)
 - **Test Settings** (optional): Send a test request to verify your configuration
 
 ### Prompt Configuration
@@ -48,6 +47,7 @@ Navigate to **Setup > Prompt AI** to configure your AI prompts using the visual 
 Each prompt configuration consists of:
 
 - **Label**: Optional identifier for easy recognition
+- **Overwrite Target Field Content**: Controls whether AI responses overwrite existing content in target fields (disabled by default)
 - **Template(s)**: The template(s) this prompt applies to (leave empty for all templates, select multiple templates to apply to specific templates, or select a repeater template to process repeater fields)
 - **Source Field**: The field whose content is sent to the AI
 - **Target Field**: Where the AI result is saved (leave empty to overwrite the source field)
@@ -86,7 +86,7 @@ This allows you to create template-specific prompts or prompts that work across 
 
 #### Content Overwrite Protection
 
-The **"Overwrite Target Field Content"** setting controls how the module handles existing content:
+The **"Overwrite Target Field Content"** setting can be configured per prompt and controls how the module handles existing content:
 
 - **Disabled (default)**: AI responses are only written to empty target fields/subfields, preserving existing content
 - **Enabled**: AI responses always overwrite existing content in target fields/subfields
