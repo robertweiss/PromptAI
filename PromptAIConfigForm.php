@@ -22,8 +22,8 @@ class PromptAIConfigForm {
         // Add Alpine.js script for functionality
         $out .= $this->getAlpineScript();
 
-        $out .= '<h2>'._('Prompt Configuration').'</h2>';
-        $out .= '<p>'._('Configure the AI prompts that should be used for the different fields. If the source field is an image/file field, the target field is interpreted as a custom subfield of the image/file field (if left empty, the description is used as the target instead).').'</p>';
+        $out .= '<h2>'.__('Prompt Configuration').'</h2>';
+        $out .= '<p>'.__('Configure the AI prompts that should be used for the different fields. If the source field is an image/file field, the target field is interpreted as a custom subfield of the image/file field (if left empty, the description is used as the target instead).').'</p>';
 
         /** @var InputfieldForm $form */
         $form = wire('modules')->get('InputfieldForm');
@@ -33,7 +33,7 @@ class PromptAIConfigForm {
         $form->attr('x-data', 'promptConfigForm()');
 
         // Notice of no configurations set
-        $noConfigLabel = '<div x-show="fieldsets.length === 0" class="notice"><p>'._('No prompt configurations defined yet. Click "Add New Prompt Configuration" to get started.').'</p></div>';
+        $noConfigLabel = '<div x-show="fieldsets.length === 0" class="notice"><p>'.__('No prompt configurations defined yet. Click "Add New Prompt Configuration" to get started.').'</p></div>';
 
         // Wrap fieldset rendering in <template> for Alpine.js
         $fieldsetTemplate = '
@@ -42,7 +42,7 @@ class PromptAIConfigForm {
         $addFieldsetButton = '
             <a class="" href="#" x-on:click.prevent="addFieldset()">
                 <i class="fa fa-fw fa-plus-circle" data-on="fa-spin fa-spinner" data-off="fa-plus-circle"></i>
-                '._('Add New Prompt Configuration').'
+                '.__('Add New Prompt Configuration').'
             </a>
         ';
 
@@ -84,9 +84,9 @@ class PromptAIConfigForm {
         $fieldset->attr(['class' => 'prompt-ai-config--item-content', 'x-show' => 'fieldsets.length > 0']);
 
         // Fieldset Header
-        $configurationLabel = _('Prompt Configuration');
-        $untitledLabel = _('Untitled');
-        $removeLabel = _('Remove');
+        $configurationLabel = __('Prompt Configuration');
+        $untitledLabel = __('Untitled');
+        $removeLabel = __('Remove');
         $headerHtml = '
             <div class="prompt-ai-config--item-header InputfieldHeader">
                 <span class="prompt-ai-config--item-controls">
@@ -102,8 +102,8 @@ class PromptAIConfigForm {
         // Fieldset Label
         /** @var InputfieldText $field */
         $field = $fieldset->InputfieldText;
-        $field->label = _('Label');
-        $field->notes = _('(for identification, optional)');
+        $field->label = __('Label');
+        $field->notes = __('(for identification, optional)');
         $field->attr(['x-model' => 'fieldset.label']);
         $field->columnWidth = 66;
         $fieldset->add($field);
@@ -111,9 +111,9 @@ class PromptAIConfigForm {
                 // Fieldset Overwrite Target
         /** @var InputfieldCheckbox $field */
         $field = $fieldset->InputfieldCheckbox;
-        $field->label = _('Overwrite target field content');
+        $field->label = __('Overwrite target field content');
         $field->description = '';
-        $field->notes = _('When unchecked, only fills empty fields');
+        $field->notes = __('When unchecked, only fills empty fields');
         $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
         $field->columnWidth = 34;
         $fieldset->add($field);
@@ -121,8 +121,8 @@ class PromptAIConfigForm {
         // Fieldset Template
         /** @var InputfieldSelect $field */
         $field = $fieldset->InputfieldAsmSelect;
-        $field->label = _('Template(s)');
-        $field->notes = _('(leave empty for all templates)');
+        $field->label = __('Template(s)');
+        $field->notes = __('(leave empty for all templates)');
         $field->class = 'uk-select';
         $field->attr(['x-model' => 'fieldset.template']);
         $field->options = PromptAIHelper::getTemplateOptions();
@@ -132,28 +132,28 @@ class PromptAIConfigForm {
         // Fieldset Source Field
         /** @var InputfieldSelect $field */
         $field = $fieldset->InputfieldSelect;
-        $field->label = _('Source Field');
-        $field->notes = _('(required)');
+        $field->label = __('Source Field');
+        $field->notes = __('(required)');
         $field->attr(['x-model' => 'fieldset.sourceField', 'required' => 'required']);
-        $field->options = ['' => _('-- Select Source Field --')] + PromptAIHelper::getFieldOptions();
+        $field->options = ['' => __('-- Select Source Field --')] + PromptAIHelper::getFieldOptions();
         $field->columnWidth = 33;
         $fieldset->add($field);
 
         // Fieldset Target Field
         /** @var InputfieldSelect $field */
         $field = $fieldset->InputfieldSelect;
-        $field->label = _('Target Field');
-        $field->notes = _('(leave empty to use source field)');
+        $field->label = __('Target Field');
+        $field->notes = __('(leave empty to use source field)');
         $field->attr(['x-model' => 'fieldset.targetField']);
-        $field->options = ['' => _('-- Use Source Field --')] + PromptAIHelper::getFieldOptions();
+        $field->options = ['' => __('-- Use Source Field --')] + PromptAIHelper::getFieldOptions();
         $field->columnWidth = 34;
         $fieldset->add($field);
 
         // Fieldset Prompt
         /** @var InputfieldTextarea $field */
         $field = $fieldset->InputfieldTextarea;
-        $field->label = _('Prompt');
-        $field->notes = _('(required)');
+        $field->label = __('Prompt');
+        $field->notes = __('(required)');
         $field->attr(['rows' => 4, 'x-model' => 'fieldset.prompt', 'required' => 'required']);
         $field->columnWidth = 100;
         $fieldset->add($field);
@@ -293,14 +293,14 @@ class PromptAIConfigForm {
         $configDataJson = $input->post->text('prompt_config_data', ['maxLength' => 0]);
 
         if (empty($configDataJson)) {
-            wire('session')->error(_('No configuration data received.'));
+            wire('session')->error(__('No configuration data received.'));
 
             return;
         }
         // Parse the JSON data
         $configData = json_decode($configDataJson, true);
         if (json_last_error() !== JSON_ERROR_NONE) {
-            wire('session')->error(_('Invalid configuration data format.'));
+            wire('session')->error(__('Invalid configuration data format.'));
 
             return;
         }
@@ -344,9 +344,9 @@ class PromptAIConfigForm {
         $saveResult = wire('modules')->saveConfig('PromptAI', $moduleConfig);
 
         if ($saveResult) {
-            wire('session')->message(_('Prompt configuration saved successfully!'));
+            wire('session')->message(__('Prompt configuration saved successfully!'));
         } else {
-            wire('session')->error(_('Failed to save prompt configuration.'));
+            wire('session')->error(__('Failed to save prompt configuration.'));
         }
     }
 }
