@@ -25,6 +25,11 @@ class PromptAIConfigForm {
         $out .= '<h2>'.__('Prompt Configuration').'</h2>';
         $out .= '<p>'.__('Configure the AI prompts that should be used for the different fields. If the source field is an image/file field, the target field is interpreted as a custom subfield of the image/file field (if left empty, the description is used as the target instead).').'</p>';
 
+                $provider = wire('modules')->getConfig('PromptAI')['provider'];
+        if ($provider === 'deepseek') {
+            $out .= '<p class="uk-text-danger uk-alert">'.__('Attention: When selecting DeepSeek as the AI provider, file or image fields are currently not support by the framework.').'</p>';
+        }
+
         /** @var InputfieldForm $form */
         $form = wire('modules')->get('InputfieldForm');
         $form->attr('id', 'prompt-config-form');

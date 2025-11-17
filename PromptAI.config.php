@@ -17,6 +17,7 @@ class PromptAIConfig extends ModuleConfig {
         'anthropic' => 'Anthropic',
         'openai' => 'OpenAI',
         'gemini' => 'Gemini',
+        'deepseek' => 'DeepSeek',
     ];
 
     protected function buildInputField($fieldNameId, $meta) {
@@ -64,7 +65,7 @@ class PromptAIConfig extends ModuleConfig {
                 'name+id' => 'model',
                 'label' => $this->_('AI Model'),
                 'description' => $this->_('Which AI model should be used?'),
-                'notes' => $this->_("[Anthropic](https://docs.anthropic.com/en/docs/about-claude/models/all-models),  [OpenAI](https://platform.openai.com/docs/models), [Gemini](https://ai.google.dev/gemini-api/docs/models)"),
+                'notes' => $this->_("[Anthropic](https://docs.anthropic.com/en/docs/about-claude/models/all-models),  [OpenAI](https://platform.openai.com/docs/models), [Gemini](https://ai.google.dev/gemini-api/docs/models), [DeepSeek](https://api-docs.deepseek.com/quick_start/pricing)"),
                 'columnWidth' => 33,
             ])
         );
@@ -74,7 +75,7 @@ class PromptAIConfig extends ModuleConfig {
                 'name+id' => 'apiKey',
                 'label' => $this->_('API Key'),
                 'description' => $this->_('You need an API key to use this module.'),
-                'notes' => $this->_("[Anthropic](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/account/api-keys), [Gemini](https://aistudio.google.com/apikey)"),
+                'notes' => $this->_("[Anthropic](https://console.anthropic.com/settings/keys), [OpenAI](https://platform.openai.com/account/api-keys), [Gemini](https://aistudio.google.com/apikey), [DeepSeek](https://platform.deepseek.com/api_keys)"),
                 'columnWidth' => 34,
                 'required' => false,
             ])

@@ -7,6 +7,7 @@ use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Providers\Gemini\Gemini;
+use NeuronAI\Providers\Deepseek;
 
 class PromptAIAgent extends Agent {
     private ?string $apiKey;
@@ -38,6 +39,11 @@ class PromptAIAgent extends Agent {
         }
         if ($this->providerName === 'gemini') {
             return new Gemini(
+                key: $this->apiKey, model: $this->modelName,
+            );
+        }
+        if ($this->providerName === 'deepseek') {
+            return new Deepseek(
                 key: $this->apiKey, model: $this->modelName,
             );
         }

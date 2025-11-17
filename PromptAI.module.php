@@ -406,6 +406,11 @@ class PromptAI extends Process implements Module {
             return;
         }
 
+        if ($this['provider'] === 'deepseek') {
+            $this->error(__('DeepSeek is currently not supported for file or image fields.'));
+            return;
+        }
+
         $targetSubfield = 'description';
         if ($promptMatrixEntity->targetField) {
             $targetField = wire('fields')->get($promptMatrixEntity->targetField);
