@@ -31,7 +31,7 @@ PromptAI creates a dedicated configuration page accessible from **Setup > Prompt
 
 Configure these settings in the module configuration (Modules > Site > PromptAI > Configure):
 
-- **AI Provider** (required): Choose from Anthropic, OpenAI, or Gemini
+- **AI Provider** (required): Choose from Anthropic, OpenAI, Gemini or DeepSeek (DeepSeek does not support image or file field processing)
 - **AI Model** (required): Specify the model to use (see provider documentation for available models)
 - **API Key** (required): Your API key for the selected provider
 - **System Prompt** (optional): A general instruction sent to the AI with every request
