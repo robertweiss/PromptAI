@@ -1,12 +1,13 @@
 <?php namespace ProcessWire;
 
 class PromptMatrixEntity {
-    public ?array $template;
-    public ?int $sourceField;
-    public ?int $targetField;
-    public ?string $prompt;
-    public ?string $label;
-    public ?bool $overwriteTarget;
+    public ?string $mode;           // 'inline' or 'page'
+    public ?array $templates;        // Array of template IDs, null/empty = all templates
+    public ?array $fields;          // Array of field IDs (REQUIRED)
+    public ?string $prompt;         // AI instruction (REQUIRED)
+    public ?string $label;          // UI label (optional)
+    public ?bool $overwriteTarget;  // Only relevant for page mode
+    public ?string $targetSubfield; // Subfield for file/image fields (default: 'description')
 }
 
 class PromptAIConfig extends ModuleConfig {
@@ -40,8 +41,8 @@ class PromptAIConfig extends ModuleConfig {
             'apiKey' => '',
             'systemPrompt' => '',
             'promptMatrix' => '',
-            'individualButtons' => 0,
-            'overwriteTarget' => 0,
+            'individualButtons' => false,
+            'enableTools' => false,
             'testSettings' => 0,
         ];
     }
@@ -65,7 +66,7 @@ class PromptAIConfig extends ModuleConfig {
                 'name+id' => 'model',
                 'label' => $this->_('AI Model'),
                 'description' => $this->_('Which AI model should be used?'),
-                'notes' => $this->_("[Anthropic](https://docs.anthropic.com/en/docs/about-claude/models/all-models),  [OpenAI](https://platform.openai.com/docs/models), [Gemini](https://ai.google.dev/gemini-api/docs/models), [DeepSeek](https://api-docs.deepseek.com/quick_start/pricing)"),
+                'notes' => $this->_("[Anthropic](https://platform.claude.com/docs/en/about-claude/models/overview),  [OpenAI](https://platform.openai.com/docs/models), [Gemini](https://ai.google.dev/gemini-api/docs/models), [DeepSeek](https://api-docs.deepseek.com/quick_start/pricing)"),
                 'columnWidth' => 33,
             ])
         );
@@ -99,18 +100,6 @@ class PromptAIConfig extends ModuleConfig {
                 'name+id' => 'promptMatrixHint',
                 'label' => $this->_('Prompts'),
                 'description' => $this->_('Use the visual configuration interface to manage your prompts: ') . $configLink,
-                'columnWidth' => 34,
-            ])
-        );
-
-        $inputfields->add(
-            $this->buildInputField('InputfieldCheckbox', [
-                'name+id' => 'individualButtons',
-                'label' => $this->_('Individual prompt buttons'),
-                'description' => $this->_('Show separate "Send to AI" buttons for each prompt configuration instead of one general button.'),
-                'notes' => $this->_('When enabled, each prompt configuration will have its own button labeled with the configuration\'s label (or "Send to AI" as fallback)'),
-                'value' => 1,
-                'checked' => '',
                 'columnWidth' => 100,
             ])
         );
@@ -119,8 +108,8 @@ class PromptAIConfig extends ModuleConfig {
             $this->buildInputField('InputfieldHidden', [
                 'name+id' => 'promptMatrix',
                 'label' => $this->_('Prompts'),
-                'description' => $this->_('Prompt configurations are stored in JSON format with template and field IDs. Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),
-                'notes' => $this->_('This field stores the prompt configuration data. Please use the dedicated Prompt AI configuration page to modify settings instead of editing this field directly.'),
+                'description' => $this->_('Prompt configurations are stored in JSON format. Use the visual configuration interface in Setup > Prompt AI to manage your prompts.'),
+                'notes' => $this->_('This field stores the prompt configuration data. Please use the dedicated Prompt AI configuration page to modify settings.'),
                 'columnWidth' => 100,
             ])
         );
@@ -130,13 +119,21 @@ class PromptAIConfig extends ModuleConfig {
         }
 
         $inputfields->add(
-            $this->buildInputField('InputfieldHidden', [
-                'name+id' => 'overwriteTarget',
-                'label' => $this->_('Overwrite target field content (deprecated)'),
-                'description' => $this->_('This global setting is deprecated. Use the per-prompt "Overwrite target field content" setting in the Prompt AI configuration instead.'),
-                'notes' => $this->_('This setting will be removed in a future version. Please configure overwrite behavior individually for each prompt.'),
-                'value' => 0,
-                'checked' => '',
+            $this->buildInputField('InputfieldCheckbox', [
+                'name+id' => 'individualButtons',
+                'label' => $this->_('Individual buttons for page mode'),
+                'description' => $this->_('Show separate "Save + {prompt label}" button for each page mode prompt instead of a single "Save + Send to AI" button'),
+                'value' => 1,
+                'columnWidth' => 100,
+            ])
+        );
+
+        $inputfields->add(
+            $this->buildInputField('InputfieldCheckbox', [
+                'name+id' => 'enableTools',
+                'label' => $this->_('Enable AI tools'),
+                'description' => $this->_('Allow the AI to call ProcessWire API tools (getPages, getPage, getFields) for data retrieval. This lets you write prompts like "list the first 15 blog posts as links".'),
+                'value' => 1,
                 'columnWidth' => 100,
             ])
         );

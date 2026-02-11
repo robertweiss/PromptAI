@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Anthropic;
 
 use GuzzleHttp\Exception\GuzzleException;
@@ -32,7 +34,7 @@ trait HandleStream
         // https://docs.anthropic.com/claude/reference/messages_post
         $stream = $this->client->post('messages', [
             'stream' => true,
-            ...\compact('json')
+            ...['json' => $json]
         ])->getBody();
 
         $toolCalls = [];
@@ -65,8 +67,8 @@ trait HandleStream
             // Handle tool call
             if ($line['type'] === 'content_block_stop' && !empty($toolCalls)) {
                 // Restore the input field as an array
-                $toolCalls = \array_map(function (array $call) {
-                    $call['input'] = \json_decode($call['input'], true);
+                $toolCalls = \array_map(function (array $call): array {
+                    $call['input'] = \json_decode((string) $call['input'], true);
                     return $call;
                 }, $toolCalls);
 
@@ -98,10 +100,8 @@ trait HandleStream
                 'name' => $line['content_block']['name'],
                 'input' => '',
             ];
-        } else {
-            if ($input = $line['delta']['partial_json'] ?? null) {
-                $toolCalls[$line['index']]['input'] .= $input;
-            }
+        } elseif ($input = $line['delta']['partial_json'] ?? null) {
+            $toolCalls[$line['index']]['input'] .= $input;
         }
 
         return $toolCalls;
@@ -111,14 +111,14 @@ trait HandleStream
     {
         $line = $this->readLine($stream);
 
-        if (! \str_starts_with($line, 'data:')) {
+        if (! \str_starts_with((string) $line, 'data:')) {
             return null;
         }
 
-        $line = \trim(\substr($line, \strlen('data: ')));
+        $line = \trim(\substr((string) $line, \strlen('data: ')));
 
         try {
-            return \json_decode($line, true, flags: JSON_THROW_ON_ERROR);
+            return \json_decode($line, true, flags: \JSON_THROW_ON_ERROR);
         } catch (\Throwable $exception) {
             throw new ProviderException('Anthropic streaming error - '.$exception->getMessage());
         }

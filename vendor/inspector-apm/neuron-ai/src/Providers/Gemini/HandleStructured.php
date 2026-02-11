@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Gemini;
 
 use NeuronAI\Chat\Enums\MessageRole;
@@ -38,9 +40,6 @@ trait HandleStructured
 
     /**
      * Gemini does not support additionalProperties attribute.
-     *
-     * @param array $schema
-     * @return array
      */
     protected function adaptSchema(array $schema): array
     {
@@ -49,7 +48,7 @@ trait HandleStructured
         }
 
         foreach ($schema as $key => $value) {
-            if (is_array($value)) {
+            if (\is_array($value)) {
                 $schema[$key] = $this->adaptSchema($value);
             }
         }

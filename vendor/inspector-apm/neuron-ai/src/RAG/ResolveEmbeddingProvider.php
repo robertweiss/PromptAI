@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG;
 
 use NeuronAI\RAG\Embeddings\EmbeddingsProviderInterface;
@@ -8,8 +10,6 @@ trait ResolveEmbeddingProvider
 {
     /**
      * The embeddings provider of the RAG system.
-     *
-     * @var EmbeddingsProviderInterface
      */
     protected EmbeddingsProviderInterface $embeddingsProvider;
 

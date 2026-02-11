@@ -1,9 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\VectorStore\Doctrine;
 
 use Doctrine\DBAL\Types\Type;
 use Doctrine\ORM\EntityManagerInterface;
+use NeuronAI\Exceptions\VectorStoreException;
 use NeuronAI\RAG\Document;
 use NeuronAI\RAG\VectorStore\VectorStoreInterface;
 
@@ -17,14 +20,14 @@ class DoctrineVectorStore implements VectorStoreInterface
         public readonly string $entityClassName,
         protected int $topK = 4,
     ) {
-        if (!interface_exists(EntityManagerInterface::class)) {
+        if (!\interface_exists(EntityManagerInterface::class)) {
             throw new \RuntimeException('To use this functionality, you must install the `doctrine/orm` package: `composer require doctrine/orm`.');
         }
 
         $conn = $entityManager->getConnection();
         $this->doctrineVectorStoreType = SupportedDoctrineVectorStore::fromPlatform($conn->getDatabasePlatform());
         $registeredTypes = Type::getTypesMap();
-        if (!array_key_exists(VectorType::VECTOR, $registeredTypes)) {
+        if (!\array_key_exists(VectorType::VECTOR, $registeredTypes)) {
             Type::addType(VectorType::VECTOR, VectorType::class);
             $conn->getDatabasePlatform()->registerDoctrineTypeMapping('vector', VectorType::VECTOR);
         }
@@ -32,26 +35,34 @@ class DoctrineVectorStore implements VectorStoreInterface
         $this->doctrineVectorStoreType->addCustomisationsTo($this->entityManager);
     }
 
-    public function addDocument(Document $document): void
+    public function addDocument(Document $document): VectorStoreInterface
     {
-        if (empty($document->embedding)) {
+        if ($document->embedding === []) {
             throw new \RuntimeException('document embedding must be set before adding a document');
         }
 
         $this->persistDocument($document);
         $this->entityManager->flush();
+        return $this;
     }
 
-    public function addDocuments(array $documents): void
+    public function addDocuments(array $documents): VectorStoreInterface
     {
         if ($documents === []) {
-            return;
+            return $this;
+            ;
         }
         foreach ($documents as $document) {
             $this->persistDocument($document);
         }
 
         $this->entityManager->flush();
+        return $this;
+    }
+
+    public function deleteBySource(string $sourceType, string $sourceName): VectorStoreInterface
+    {
+        throw new VectorStoreException("Delete by source not implemented in ".self::class);
     }
 
     public function similaritySearch(array $embedding): array
@@ -66,7 +77,7 @@ class DoctrineVectorStore implements VectorStoreInterface
 
         foreach ($this->filters as $key => $value) {
             $paramName = 'where_'.$key;
-            $qb->andWhere(sprintf('e.%s = :%s', $key, $paramName))
+            $qb->andWhere(\sprintf('e.%s = :%s', $key, $paramName))
                 ->setParameter($paramName, $value);
         }
 
@@ -76,7 +87,7 @@ class DoctrineVectorStore implements VectorStoreInterface
 
     private function persistDocument(Document $document): void
     {
-        if (empty($document->embedding)) {
+        if ($document->embedding === []) {
             throw new \RuntimeException('Trying to save a document in a vectorStore without embedding');
         }
 

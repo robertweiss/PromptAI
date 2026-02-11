@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers;
 
 use GuzzleHttp\Client;
@@ -11,39 +13,44 @@ interface AIProviderInterface
 {
     /**
      * Send predefined instruction to the LLM.
-     *
-     * @param ?string $prompt
-     * @return AIProviderInterface
      */
     public function systemPrompt(?string $prompt): AIProviderInterface;
 
     /**
      * Set the tools to be exposed to the LLM.
      *
-     * @param array<ToolInterface> $tools
-     * @return AIProviderInterface
+     * @param ToolInterface[] $tools
      */
     public function setTools(array $tools): AIProviderInterface;
 
     /**
      * The component responsible for mapping the NeuronAI Message to the AI provider format.
-     *
-     * @return MessageMapperInterface
      */
     public function messageMapper(): MessageMapperInterface;
 
     /**
      * Send a prompt to the AI agent.
      *
-     * @param array $messages
-     * @return Message
+     * @param Message[] $messages
      */
     public function chat(array $messages): Message;
 
-    public function chatAsync(array $message): PromiseInterface;
+    /**
+     * Send a prompt to the AI agent.
+     *
+     * @param Message[] $messages
+     */
+    public function chatAsync(array $messages): PromiseInterface;
 
+    /**
+     * @param Message[]|string $messages
+     */
     public function stream(array|string $messages, callable $executeToolsCallback): \Generator;
 
+    /**
+     * @param Message[] $messages
+     * @param array<string, mixed> $response_schema
+     */
     public function structured(array $messages, string $class, array $response_schema): Message;
 
     public function setClient(Client $client): AIProviderInterface;

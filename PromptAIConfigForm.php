@@ -9,7 +9,7 @@ class PromptAIConfigForm {
     public function __construct() {
         /** @var Module promptAI */
         $this->promptAI = wire('modules')->get('PromptAI');
-        $this->promptMatrix = PromptAIHelper::parsePromptMatrix($this->promptAI->get('promptMatrix'));
+        $this->promptMatrix = PromptAIHelper::parsePromptMatrix($this->promptAI->get('promptMatrix'), false);
     }
 
     public function render(): string {
@@ -18,16 +18,21 @@ class PromptAIConfigForm {
         wire('config')->styles->add($moduleUrl."styles.css");
 
         $out = '';
+        $moduleConfig = wire('modules')->getConfig('PromptAI');
 
         // Add Alpine.js script for functionality
         $out .= $this->getAlpineScript();
 
         $out .= '<h2>'.__('Prompt Configuration').'</h2>';
-        $out .= '<p>'.__('Configure the AI prompts that should be used for the different fields. If the source field is an image/file field, the target field is interpreted as a custom subfield of the image/file field (if left empty, the description is used as the target instead).').'</p>';
+        $out .= '<p>'.__('Configure AI prompts for your fields. Each prompt can work in two modes:').'</p>';
+        $out .= '<ul>';
+        $out .= '<li><strong>'.__('Inline Mode').':</strong> '.__('Magic wand button appears next to field(s) for instant AI processing').'</li>';
+        $out .= '<li><strong>'.__('Page Mode').':</strong> '.__('Processes field(s) when clicking "Save + Send to AI" button').'</li>';
+        $out .= '</ul>';
 
-                $provider = wire('modules')->getConfig('PromptAI')['provider'];
+        $provider = $moduleConfig['provider'] ?? '';
         if ($provider === 'deepseek') {
-            $out .= '<p class="uk-text-danger uk-alert">'.__('Attention: When selecting DeepSeek as the AI provider, file or image fields are currently not support by the framework.').'</p>';
+            $out .= '<p class="uk-text-danger uk-alert">'.__('Attention: DeepSeek does not currently support file or image fields.').'</p>';
         }
 
         /** @var InputfieldForm $form */
@@ -108,53 +113,75 @@ class PromptAIConfigForm {
         /** @var InputfieldText $field */
         $field = $fieldset->InputfieldText;
         $field->label = __('Label');
-        $field->notes = __('(for identification, optional)');
+        $field->notes = __('(optional, for identification)');
         $field->attr(['x-model' => 'fieldset.label']);
-        $field->columnWidth = 66;
+        $field->columnWidth = 50;
         $fieldset->add($field);
 
-                // Fieldset Overwrite Target
-        /** @var InputfieldCheckbox $field */
-        $field = $fieldset->InputfieldCheckbox;
-        $field->label = __('Overwrite target field content');
-        $field->description = '';
-        $field->notes = __('When unchecked, only fills empty fields');
-        $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
-        $field->columnWidth = 34;
+        // Mode selector (inline or page) - Using markup for proper Alpine.js binding
+        /** @var InputfieldMarkup $field */
+        $field = $fieldset->InputfieldMarkup;
+        $field->label = __('Mode');
+        $field->notes = __('(Inline: button on field, Page: button on save)');
+        $field->columnWidth = 50;
+        $inlineModeLabel = __('Inline Mode');
+        $pageModeLabel = __('Page Mode');
+        $field->value = '
+            <div class="InputfieldRadiosStacked">
+                <label style="display: inline-block; margin-right: 20px;">
+                    <input class="uk-radio" type="radio" value="inline" x-model="fieldset.mode" x-bind:name="\'mode_\' + index" required>
+                    ' . $inlineModeLabel . '
+                </label>
+                <label style="display: inline-block;">
+                    <input class="uk-radio" type="radio" value="page" x-model="fieldset.mode" x-bind:name="\'mode_\' + index" required>
+                    ' . $pageModeLabel . '
+                </label>
+            </div>
+        ';
         $fieldset->add($field);
 
-        // Fieldset Template
-        /** @var InputfieldSelect $field */
+        // Template selector (optional, null = all templates)
+        /** @var InputfieldAsmSelect $field */
         $field = $fieldset->InputfieldAsmSelect;
         $field->label = __('Template(s)');
         $field->notes = __('(leave empty for all templates)');
         $field->class = 'uk-select';
-        $field->attr(['x-model' => 'fieldset.template']);
+        $field->attr(['x-model' => 'fieldset.templates']);
         $field->options = PromptAIHelper::getTemplateOptions();
-        $field->columnWidth = 33;
+        $field->columnWidth = 50;
         $fieldset->add($field);
 
-        // Fieldset Source Field
-        /** @var InputfieldSelect $field */
-        $field = $fieldset->InputfieldSelect;
-        $field->label = __('Source Field');
-        $field->notes = __('(required)');
-        $field->attr(['x-model' => 'fieldset.sourceField', 'required' => 'required']);
-        $field->options = ['' => __('-- Select Source Field --')] + PromptAIHelper::getFieldOptions();
-        $field->columnWidth = 33;
+        // Fields selector (required, multiple selection)
+        /** @var InputfieldAsmSelect $field */
+        $field = $fieldset->InputfieldAsmSelect;
+        $field->label = __('Field(s)');
+        $field->notes = __('(select one or more fields, required)');
+        $field->class = 'uk-select';
+        $field->attr(['x-model' => 'fieldset.fields', 'required' => 'required']);
+        $field->options = PromptAIHelper::getFieldOptions();
+        $field->columnWidth = 50;
         $fieldset->add($field);
 
-        // Fieldset Target Field
-        /** @var InputfieldSelect $field */
-        $field = $fieldset->InputfieldSelect;
-        $field->label = __('Target Field');
-        $field->notes = __('(leave empty to use source field)');
-        $field->attr(['x-model' => 'fieldset.targetField']);
-        $field->options = ['' => __('-- Use Source Field --')] + PromptAIHelper::getFieldOptions();
-        $field->columnWidth = 34;
+        // Target Subfield (file/image fields only)
+        /** @var InputfieldText $field */
+        $field = $fieldset->InputfieldText;
+        $field->label = __('Target Subfield');
+        $field->notes = __('(only for file/image fields, default: description)');
+        $field->attr(['x-model' => 'fieldset.targetSubfield', 'placeholder' => 'description', 'x-show' => 'hasFileField(fieldset.fields)']);
+        $field->columnWidth = 50;
         $fieldset->add($field);
 
-        // Fieldset Prompt
+        // Overwrite Target (page mode only)
+        /** @var InputfieldCheckbox $field */
+        $field = $fieldset->InputfieldCheckbox;
+        $field->label = __('Overwrite field content (Page Mode only)');
+        $field->description = '';
+        $field->notes = __('When unchecked, only processes empty fields. In Inline Mode, fields are always overwritten.');
+        $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
+        $field->columnWidth = 50;
+        $fieldset->add($field);
+
+        // Prompt textarea
         /** @var InputfieldTextarea $field */
         $field = $fieldset->InputfieldTextarea;
         $field->label = __('Prompt');
@@ -172,45 +199,59 @@ class PromptAIConfigForm {
 
         foreach ($this->promptMatrix as $entity) {
             $initialData[] = [
-                'template' => $entity->template ?: [], // Template is always an array
-                'sourceField' => $entity->sourceField ?: '',
-                'targetField' => $entity->targetField ?: '',
+                'mode' => $entity->mode ?: 'inline',
+                'templates' => $entity->templates ?: [],
+                'fields' => $entity->fields ?: [],
                 'prompt' => $entity->prompt ?: '',
                 'label' => $entity->label ?: '',
                 'overwriteTarget' => $entity->overwriteTarget ?? false,
+                'targetSubfield' => $entity->targetSubfield ?? 'description',
             ];
         }
 
         // If no existing data, start with one empty fieldset
         if (empty($initialData)) {
             $initialData[] = [
-                'template' => [],
-                'sourceField' => '',
-                'targetField' => '',
+                'mode' => 'inline',
+                'templates' => [],
+                'fields' => [],
                 'prompt' => '',
                 'label' => '',
                 'overwriteTarget' => false,
+                'targetSubfield' => 'description',
             ];
         }
 
         $initialDataJson = json_encode($initialData);
+
+        // Collect file/image field IDs for conditional display of targetSubfield
+        $fileFieldIds = [];
+        if (wire('fields')) {
+            foreach (wire('fields') as $field) {
+                if (in_array(get_class($field->type), PromptAIHelper::$fileFieldTypes)) {
+                    $fileFieldIds[] = (string)$field->id;
+                }
+            }
+        }
+        $fileFieldIdsJson = json_encode($fileFieldIds);
 
         return "
         <script>
         function promptConfigForm() {
             return {
                 fieldsets: {$initialDataJson},
+                fileFieldIds: {$fileFieldIdsJson},
                 init() {
                     this.setupAsmSelectListener();
                 },
                 setupListener() {
                     const self = this;
-                    // Find all select elements with x-model containing 'template'
-                    $('select[x-model*=\"template\"]').off('change.asmAlpine').on('change.asmAlpine', function(e, data) {
+                    // Find all select elements with x-model containing 'template' or 'fields'
+                    $('select[x-model*=\"templates\"], select[x-model*=\"fields\"]').off('change.asmAlpine').on('change.asmAlpine', function(e, data) {
                         const target = this;
                         const xModel = target.getAttribute('x-model');
-                        
-                        if (xModel === 'fieldset.template') {
+
+                        if (xModel === 'fieldset.templates' || xModel === 'fieldset.fields') {
                             // Find the fieldset index by looking at the DOM structure
                             // Each fieldset is wrapped in a .prompt-ai-config--item container
                             const fieldsetContainer = target.closest('.prompt-ai-config--item');
@@ -218,20 +259,19 @@ class PromptAIConfigForm {
                                 // Get all fieldset containers and find the index of this one
                                 const allFieldsetContainers = document.querySelectorAll('.prompt-ai-config--item');
                                 const fieldsetIndex = Array.from(allFieldsetContainers).indexOf(fieldsetContainer);
-                                
+
                                 if (fieldsetIndex !== -1 && self.fieldsets[fieldsetIndex]) {
                                     // Get selected values from the select element
                                     const selectedValues = Array.from(target.options)
                                         .filter(option => option.selected)
                                         .map(option => option.value);
-                                    self.fieldsets[fieldsetIndex].template = selectedValues;
-                                    
-                                    // Log for debugging
-//                                    console.log('asmSelect change detected:', {
-//                                        fieldsetIndex: fieldsetIndex,
-//                                        selectedValues: selectedValues,
-//                                        data: data // This contains the asmSelect event data
-//                                    });
+
+                                    // Update the appropriate field in the Alpine data
+                                    if (xModel === 'fieldset.templates') {
+                                        self.fieldsets[fieldsetIndex].templates = selectedValues;
+                                    } else if (xModel === 'fieldset.fields') {
+                                        self.fieldsets[fieldsetIndex].fields = selectedValues;
+                                    }
                                 }
                             }
                         }
@@ -245,14 +285,19 @@ class PromptAIConfigForm {
                         setTimeout(() => this.setupListener(), 100);
                     }
                 },
+                hasFileField(fields) {
+                    if (!fields || !Array.isArray(fields)) return false;
+                    return fields.some(id => this.fileFieldIds.includes(String(id)));
+                },
                 addFieldset() {
                     this.fieldsets.push({
-                        template: [],
-                        sourceField: '',
-                        targetField: '',
+                        mode: 'inline',
+                        templates: [],
+                        fields: [],
                         prompt: '',
                         label: '',
-                        overwriteTarget: false
+                        overwriteTarget: false,
+                        targetSubfield: 'description'
                     });
                     
                     // Initialize new asmSelect fields and scroll after DOM update
@@ -310,41 +355,60 @@ class PromptAIConfigForm {
             return;
         }
 
+        // Get module config
+        $moduleConfig = wire('modules')->getConfig('PromptAI');
+
         // Convert to the expected format
         $jsonConfig = [];
         foreach ($configData as $config) {
-            // Skip if required fields are missing
-            if (empty($config['sourceField']) || empty($config['prompt'])) {
+            // Mode is required
+            if (empty($config['mode']) || !in_array($config['mode'], ['inline', 'page'])) {
                 continue;
             }
 
-            // Handle template as array only
+            // Prompt is required
+            if (empty($config['prompt'])) {
+                continue;
+            }
+
+            // Fields array is required
+            if (empty($config['fields']) || !is_array($config['fields'])) {
+                continue;
+            }
+
+            // Handle template as array (optional, null = all templates)
             $template = null;
-            if (!empty($config['template']) && is_array($config['template'])) {
-                $template = array_map('intval', array_filter($config['template']));
+            if (!empty($config['templates']) && is_array($config['templates'])) {
+                $template = array_map('intval', array_filter($config['templates']));
                 $template = !empty($template) ? $template : null;
             }
-            $sourceField = (int)$config['sourceField'];
-            $targetField = !empty($config['targetField']) ? (int)$config['targetField'] : null;
+
+            // Fields array - convert to integers
+            $fields = array_map('intval', array_filter($config['fields']));
+            if (empty($fields)) {
+                continue; // Skip if no valid field IDs
+            }
+
+            $mode = $config['mode'];
             $prompt = $config['prompt'] ?? '';
             $label = $config['label'] ?? '';
             $overwriteTarget = $config['overwriteTarget'] ?? false;
+            $targetSubfield = trim($config['targetSubfield'] ?? 'description') ?: 'description';
 
             $jsonConfig[] = [
-                'template' => $template,
-                'sourceField' => $sourceField,
-                'targetField' => $targetField,
+                'mode' => $mode,
+                'templates' => $template,
+                'fields' => $fields,
                 'prompt' => $prompt,
                 'label' => $label,
                 'overwriteTarget' => $overwriteTarget,
+                'targetSubfield' => $targetSubfield,
             ];
         }
 
         $promptMatrixString = json_encode($jsonConfig, JSON_PRETTY_PRINT);
 
         // Save to module configuration
-        $moduleConfig = wire('modules')->getConfig('PromptAI');
-
         $moduleConfig['promptMatrix'] = $promptMatrixString;
         $saveResult = wire('modules')->saveConfig('PromptAI', $moduleConfig);
 

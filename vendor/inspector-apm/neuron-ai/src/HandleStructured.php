@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI;
 
 use GuzzleHttp\Exception\RequestException;
@@ -14,9 +16,12 @@ use NeuronAI\Observability\Events\Extracting;
 use NeuronAI\Observability\Events\InferenceStart;
 use NeuronAI\Observability\Events\InferenceStop;
 use NeuronAI\Exceptions\AgentException;
+use NeuronAI\Observability\Events\SchemaGenerated;
+use NeuronAI\Observability\Events\SchemaGeneration;
 use NeuronAI\Observability\Events\Validated;
 use NeuronAI\Observability\Events\Validating;
 use NeuronAI\StructuredOutput\Deserializer\Deserializer;
+use NeuronAI\StructuredOutput\Deserializer\DeserializerException;
 use NeuronAI\StructuredOutput\JsonExtractor;
 use NeuronAI\StructuredOutput\JsonSchema;
 use NeuronAI\StructuredOutput\Validation\Validator;
@@ -26,10 +31,6 @@ trait HandleStructured
     /**
      * Enforce a structured response.
      *
-     * @param Message|array $messages
-     * @param string|null $class
-     * @param int $maxRetries
-     * @return mixed
      * @throws AgentException
      * @throws \ReflectionException
      * @throws \Throwable
@@ -44,16 +45,18 @@ trait HandleStructured
 
         // Get the JSON schema from the response model
         $class ??= $this->getOutputClass();
+        $this->notify('schema-generation', new SchemaGeneration($class));
         $schema = (new JsonSchema())->generate($class);
+        $this->notify('schema-generated', new SchemaGenerated($class, $schema));
 
         $error = '';
         do {
             try {
                 // If something goes wrong, retry informing the model about the error
-                if (!empty(trim($error))) {
+                if (\trim($error) !== '') {
                     $correctionMessage = new UserMessage(
                         "There was a problem in your previous response that generated the following errors".
-                        PHP_EOL.PHP_EOL.'- '.$error.PHP_EOL.PHP_EOL.
+                        \PHP_EOL.\PHP_EOL.'- '.$error.\PHP_EOL.\PHP_EOL.
                         "Try to generate the correct JSON structure based on the provided schema."
                     );
                     $this->fillChatHistory($correctionMessage);
@@ -75,34 +78,38 @@ trait HandleStructured
                     new InferenceStop($last, $response)
                 );
 
+                $this->fillChatHistory($response);
+
                 if ($response instanceof ToolCallMessage) {
                     $toolCallResult = $this->executeTools($response);
-                    return $this->structured([$response, $toolCallResult], $class, $maxRetries);
-                } else {
-                    $this->fillChatHistory($response);
+                    return self::structured($toolCallResult, $class, $maxRetries);
                 }
 
                 $output = $this->processResponse($response, $schema, $class);
                 $this->notify('structured-stop');
                 return $output;
-            } catch (RequestException $exception) {
-                $error = $exception->getResponse()?->getBody()->getContents() ?? $exception->getMessage();
-                $this->notify('error', new AgentError($exception, false));
-            } catch (\Exception $exception) {
-                $error = $exception->getMessage();
-                $this->notify('error', new AgentError($exception, false));
+            } catch (RequestException $ex) {
+                $exception = $ex;
+                $error = $ex->getResponse()?->getBody()->getContents() ?? $ex->getMessage();
+                $this->notify('error', new AgentError($ex, false));
+            } catch (\Exception $ex) {
+                $exception = $ex;
+                $error = $ex->getMessage();
+                $this->notify('error', new AgentError($ex, false));
             }
 
             $maxRetries--;
         } while ($maxRetries >= 0);
 
-        $exception = new AgentException(
-            "The LLM wasn't able to generate a structured response for the class {$class}."
-        );
-        $this->notify('error', new AgentError($exception));
-        throw new AgentException($exception->getMessage(), $exception->getCode(), $exception);
+        throw $exception;
     }
 
+    /**
+     * @param array<string, mixed> $schema
+     * @throws AgentException
+     * @throws DeserializerException
+     * @throws \ReflectionException
+     */
     protected function processResponse(
         Message $response,
         array $schema,
@@ -112,7 +119,7 @@ trait HandleStructured
         $this->notify('structured-extracting', new Extracting($response));
         $json = (new JsonExtractor())->getJson($response->getContent());
         $this->notify('structured-extracted', new Extracted($response, $schema, $json));
-        if (!$json) {
+        if ($json === null || $json === '') {
             throw new AgentException("The response does not contains a valid JSON Object.");
         }
 
@@ -129,7 +136,7 @@ trait HandleStructured
 
         if (\count($violations) > 0) {
             $this->notify('structured-validated', new Validated($class, $json, $violations));
-            throw new AgentException(PHP_EOL.'- '.implode(PHP_EOL.'- ', $violations));
+            throw new AgentException(\PHP_EOL.'- '.\implode(\PHP_EOL.'- ', $violations));
         }
         $this->notify('structured-validated', new Validated($class, $json));
 

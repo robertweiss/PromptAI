@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Tavily;
 
 use GuzzleHttp\Client;
@@ -43,9 +45,9 @@ class TavilyExtractTool extends Tool
         ];
     }
 
-    public function __invoke(string $url): string
+    public function __invoke(string $url): array
     {
-        if (!filter_var($url, FILTER_VALIDATE_URL)) {
+        if (!\filter_var($url, \FILTER_VALIDATE_URL)) {
             throw new ToolException('Invalid URL.');
         }
 
@@ -64,12 +66,8 @@ class TavilyExtractTool extends Tool
 
     protected function getClient(): Client
     {
-        if (isset($this->client)) {
-            return $this->client;
-        }
-
-        return $this->client = new Client([
-            'base_uri' => trim($this->url, '/').'/',
+        return $this->client ?? $this->client = new Client([
+            'base_uri' => \trim($this->url, '/').'/',
             'headers' => [
                 'Authorization' => 'Bearer '.$this->key,
                 'Content-Type' => 'application/json',

@@ -1,10 +1,13 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Observability;
 
 use Inspector\Configuration;
 use Inspector\Inspector;
 use Inspector\Models\Segment;
+use NeuronAI\Agent;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Observability\Events\AgentError;
 use NeuronAI\RAG\RAG;
@@ -34,16 +37,25 @@ class AgentMonitoring implements \SplObserver
      */
     protected array $segments = [];
 
+
+    /**
+     * @var array<string, string>
+     */
     protected array $methodsMap = [
         'error' => 'reportError',
         'chat-start' => 'start',
         'chat-stop' => 'stop',
         'stream-start' => 'start',
         'stream-stop' => 'stop',
-        'rag-start' => 'start',
-        'rag-stop' => 'stop',
         'structured-start' => 'start',
         'structured-stop' => 'stop',
+        'chat-rag-start' => 'start',
+        'chat-rag-stop' => 'stop',
+        'stream-rag-start' => 'start',
+        'stream-rag-stop' => 'stop',
+        'structured-rag-start' => 'start',
+        'structured-rag-stop' => 'stop',
+
         'message-saving' => 'messageSaving',
         'message-saved' => 'messageSaved',
         'tools-bootstrapping' => 'toolsBootstrapping',
@@ -52,14 +64,18 @@ class AgentMonitoring implements \SplObserver
         'inference-stop' => 'inferenceStop',
         'tool-calling' => 'toolCalling',
         'tool-called' => 'toolCalled',
+        'schema-generation' => 'schemaGeneration',
+        'schema-generated' => 'schemaGenerated',
         'structured-extracting' => 'extracting',
         'structured-extracted' => 'extracted',
         'structured-deserializing' => 'deserializing',
         'structured-deserialized' => 'deserialized',
         'structured-validating' => 'validating',
         'structured-validated' => 'validated',
-        'rag-vectorstore-searching' => 'vectorStoreSearching',
-        'rag-vectorstore-result' => 'vectorStoreResult',
+        'rag-retrieving' => 'ragRetrieving',
+        'rag-retrieved' => 'ragRetrieved',
+        'rag-preprocessing' => 'preProcessing',
+        'rag-preprocessed' => 'preProcessed',
         'rag-postprocessing' => 'postProcessing',
         'rag-postprocessed' => 'postProcessed',
         'workflow-start' => 'workflowStart',
@@ -70,29 +86,31 @@ class AgentMonitoring implements \SplObserver
 
     protected static ?AgentMonitoring $instance = null;
 
+    /**
+     * @param Inspector $inspector The monitoring instance
+     */
+    public function __construct(
+        protected Inspector $inspector,
+        protected bool $autoFlush = false,
+    ) {
+    }
+
+
     public static function instance(): AgentMonitoring
     {
         $configuration = new Configuration($_ENV['INSPECTOR_INGESTION_KEY']);
         $configuration->setTransport($_ENV['INSPECTOR_TRANSPORT'] ?? 'async');
+        $configuration->setVersion($_ENV['INSPECTOR_VERSION'] ?? $configuration->getVersion());
 
-        if (isset($_ENV['INSPECTOR_SPLIT_MONITORING'])) {
-            return new self(new Inspector($configuration));
+        // Split monitoring between agents and workflows.
+        if (isset($_ENV['NEURON_SPLIT_MONITORING'])) {
+            return new self(new Inspector($configuration), $_ENV['NEURON_AUTOFLUSH'] ?? false);
         }
 
-        if (self::$instance === null) {
-            self::$instance = new self(new Inspector($configuration));
+        if (!self::$instance instanceof AgentMonitoring) {
+            self::$instance = new self(new Inspector($configuration), $_ENV['NEURON_AUTOFLUSH'] ?? false);
         }
         return self::$instance;
-    }
-
-    /**
-     * @param Inspector $inspector The monitoring instance
-     * @param bool $catch Report internal agent errors
-     */
-    public function __construct(
-        protected Inspector $inspector,
-        protected bool $catch = true
-    ) {
     }
 
     public function update(\SplSubject $subject, ?string $event = null, mixed $data = null): void
@@ -103,18 +121,7 @@ class AgentMonitoring implements \SplObserver
         }
     }
 
-    public function reportError(\SplSubject $subject, string $event, AgentError $data)
-    {
-        if ($this->catch) {
-            $this->inspector->reportException($data->exception, !$data->unhandled);
-
-            if ($data->unhandled) {
-                $this->inspector->transaction()->setResult('error');
-            }
-        }
-    }
-
-    public function start(\NeuronAI\Agent $agent, string $event, $data = null)
+    public function start(Agent $agent, string $event, mixed $data = null): void
     {
         if (!$this->inspector->isRecording()) {
             return;
@@ -124,30 +131,37 @@ class AgentMonitoring implements \SplObserver
         $class = $agent::class;
 
         if ($this->inspector->needTransaction()) {
-            $this->inspector->startTransaction($class.'::'.$method)->setType('ai-agent');
-        } elseif ($this->inspector->canAddSegments() && !$agent instanceof RAG) { // do not add "chat" segments on RAG
+            $this->inspector->startTransaction($class.'::'.$method)
+                ->setType('ai-agent')
+                ->setContext($this->getContext($agent));
+        } elseif ($this->inspector->canAddSegments() && !$agent instanceof RAG) { // do not add "parent" agent segments on RAG
             $key = $class.$method;
 
             if (\array_key_exists($key, $this->segments)) {
                 $key .= '-'.\uniqid();
             }
 
-            $this->segments[$key] = $this->inspector->startSegment(self::SEGMENT_TYPE.'-'.$method, "{$class}::{$method}()")
+            $segment = $this->inspector->startSegment(self::SEGMENT_TYPE.'-'.$method, "{$class}::{$method}")
                 ->setColor(self::SEGMENT_COLOR);
+            $segment->setContext($this->getContext($agent));
+            $this->segments[$key] = $segment;
         }
     }
 
-    public function stop(\NeuronAI\Agent $agent, string $event, $data = null)
+    /**
+     * @throws \Exception
+     */
+    public function stop(Agent $agent, string $event, mixed $data = null): void
     {
         $method = $this->getPrefix($event);
         $class = $agent::class;
 
         if (\array_key_exists($class.$method, $this->segments)) {
             // End the last segment for the given method and agent class
-            foreach (\array_reverse($this->segments, true) as $key => $value) {
+            foreach (\array_reverse($this->segments, true) as $key => $segment) {
                 if ($key === $class.$method) {
-                    $value->setContext($this->getContext($agent));
-                    $value->end();
+                    $segment->setContext($this->getContext($agent));
+                    $segment->end();
                     unset($this->segments[$key]);
                     break;
                 }
@@ -155,17 +169,36 @@ class AgentMonitoring implements \SplObserver
         } elseif ($this->inspector->canAddSegments()) {
             $transaction = $this->inspector->transaction()->setResult('success');
             $transaction->setContext($this->getContext($agent));
+
+            if ($this->autoFlush) {
+                $this->inspector->flush();
+            }
+        }
+    }
+
+    public function reportError(\SplSubject $subject, string $event, AgentError $data): void
+    {
+        $this->inspector->reportException($data->exception, !$data->unhandled);
+
+        if ($data->unhandled) {
+            $this->inspector->transaction()->setResult('error');
+            if ($subject instanceof Agent) {
+                $this->inspector->transaction()->setContext($this->getContext($subject));
+            }
         }
     }
 
     public function getPrefix(string $event): string
     {
-        return explode('-', $event)[0];
+        return \explode('-', $event)[0];
     }
 
-    protected function getContext(\NeuronAI\Agent $agent): array
+    /**
+     * @return array<string, mixed>
+     */
+    protected function getContext(Agent $agent): array
     {
-        $mapTool = fn (ToolInterface $tool) => [
+        $mapTool = fn (ToolInterface $tool): array => [
             $tool->getName() => [
                 'description' => $tool->getDescription(),
                 'properties' => \array_map(
@@ -181,9 +214,9 @@ class AgentMonitoring implements \SplObserver
                 'instructions' => $agent->resolveInstructions(),
             ],
             'Tools' => \array_map(
-                fn (ToolInterface|ToolkitInterface $tool) => $tool instanceof ToolInterface
+                fn (ToolInterface|ToolkitInterface $tool): array => $tool instanceof ToolInterface
                     ? $mapTool($tool)
-                    : [get_class($tool) => \array_map($mapTool, $tool->tools())],
+                    : [$tool::class => \array_map($mapTool, $tool->tools())],
                 $agent->getTools()
             ),
             //'Messages' => $agent->resolveChatHistory()->getMessages(),
@@ -194,8 +227,8 @@ class AgentMonitoring implements \SplObserver
     {
         $content = $message->getContent();
 
-        if (!is_string($content)) {
-            $content = json_encode($content, JSON_UNESCAPED_UNICODE);
+        if (!\is_string($content)) {
+            $content = \json_encode($content, \JSON_UNESCAPED_UNICODE);
         }
 
         return \md5($content.$message->getRole());
@@ -203,6 +236,6 @@ class AgentMonitoring implements \SplObserver
 
     protected function getBaseClassName(string $class): string
     {
-        return substr(strrchr($class, '\\'), 1);
+        return \substr(\strrchr($class, '\\'), 1);
     }
 }

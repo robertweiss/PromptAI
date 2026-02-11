@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Ollama;
 
 use NeuronAI\Chat\Attachments\Attachment;
@@ -18,13 +20,13 @@ class MessageMapper implements MessageMapperInterface
 {
     /**
      * Mapped messages.
-     *
-     * @var array
      */
     protected array $mapping = [];
 
     public function map(array $messages): array
     {
+        $this->mapping = [];
+
         foreach ($messages as $message) {
             match ($message::class) {
                 Message::class,
@@ -62,12 +64,11 @@ class MessageMapper implements MessageMapperInterface
         $this->mapping[] = $payload;
     }
 
-    protected function mapAttachment(Attachment $attachment)
+    protected function mapAttachment(Attachment $attachment): string
     {
         return match ($attachment->contentType) {
             AttachmentContentType::BASE64 => $attachment->content,
-            // Transform url in base64 could be a security issue. So we raise an exception.
-            AttachmentContentType::URL => throw new ProviderException('Ollama support only base64 image type.'),
+            AttachmentContentType::URL => throw new ProviderException('Ollama support only base64 attachment type.'),
         };
     }
 
@@ -80,7 +81,7 @@ class MessageMapper implements MessageMapperInterface
         }
 
         if (\array_key_exists('tool_calls', $message)) {
-            $message['tool_calls'] = \array_map(function (array $toolCall) {
+            $message['tool_calls'] = \array_map(function (array $toolCall): array {
                 if (empty($toolCall['function']['arguments'])) {
                     $toolCall['function']['arguments'] = new \stdClass();
                 }

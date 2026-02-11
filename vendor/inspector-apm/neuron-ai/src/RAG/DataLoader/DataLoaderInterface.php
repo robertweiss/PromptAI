@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\DataLoader;
 
 use NeuronAI\RAG\Document;

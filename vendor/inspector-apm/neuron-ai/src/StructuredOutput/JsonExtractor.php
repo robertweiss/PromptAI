@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\StructuredOutput;
 
 /**
@@ -12,10 +14,10 @@ class JsonExtractor
     public function __construct()
     {
         $this->extractors = [
-            fn ($text) => [$text],                   // Try as it is
-            fn ($text) => $this->findByMarkdown($text),
-            fn ($text) => $this->findByBrackets($text),
-            fn ($text) => $this->findJSONLikeStrings($text),
+            fn (string $text): array => [$text],                   // Try as it is
+            fn (string $text): array => $this->findByMarkdown($text),
+            fn (string $text): ?string => $this->findByBrackets($text),
+            fn (string $text): array => $this->findJSONLikeStrings($text),
         ];
     }
 
@@ -35,10 +37,12 @@ class JsonExtractor
             }
 
             foreach ($candidates as $candidate) {
-                if (!\is_string($candidate) || empty(trim($candidate))) {
+                if (!\is_string($candidate)) {
                     continue;
                 }
-
+                if (\trim($candidate) === '') {
+                    continue;
+                }
                 try {
                     $data = $this->tryParse($candidate);
                 } catch (\Throwable) {
@@ -65,9 +69,9 @@ class JsonExtractor
      */
     private function tryParse(string $maybeJson): ?array
     {
-        $data = \json_decode($maybeJson, true, 512, JSON_THROW_ON_ERROR);
+        $data = \json_decode($maybeJson, true, 512, \JSON_THROW_ON_ERROR);
 
-        if ($data === false || $data === null || $data === '') {
+        if (in_array($data, [false, null, ''], true)) {
             return null;
         }
 
@@ -81,7 +85,7 @@ class JsonExtractor
      */
     private function findByMarkdown(string $text): array
     {
-        if (empty(trim($text))) {
+        if (\trim($text) === '') {
             return [];
         }
 
@@ -124,12 +128,12 @@ class JsonExtractor
      */
     private function findByBrackets(string $text): ?string
     {
-        $trimmed = trim($text);
-        if (empty($trimmed)) {
+        $trimmed = \trim($text);
+        if ($trimmed === '') {
             return null;
         }
-
-        if (!$firstOpen = \strpos($trimmed, '{')) {
+        $firstOpen = \strpos($trimmed, '{');
+        if ($firstOpen === 0 || $firstOpen === false) {
             return null;
         }
 
@@ -148,8 +152,8 @@ class JsonExtractor
      */
     private function findJSONLikeStrings(string $text): array
     {
-        $text = trim($text);
-        if (empty($text)) {
+        $text = \trim($text);
+        if ($text === '') {
             return [];
         }
 

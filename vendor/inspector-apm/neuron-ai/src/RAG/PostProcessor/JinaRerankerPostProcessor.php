@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\PostProcessor;
 
 use GuzzleHttp\Client;
@@ -20,11 +22,7 @@ class JinaRerankerPostProcessor implements PostProcessorInterface
 
     protected function getClient(): Client
     {
-        if (isset($this->client)) {
-            return $this->client;
-        }
-
-        return $this->client = new Client([
+        return $this->client ?? $this->client = new Client([
             'base_uri' => 'https://api.jina.ai/v1/',
             'headers' => [
                 'Accept' => 'application/json',
@@ -41,14 +39,14 @@ class JinaRerankerPostProcessor implements PostProcessorInterface
                 'model' => $this->model,
                 'query' => $question->getContent(),
                 'top_n' => $this->topN,
-                'documents' => \array_map(fn (Document $document) => ['text' => $document->getContent()], $documents),
+                'documents' => \array_map(fn (Document $document): array => ['text' => $document->getContent()], $documents),
                 'return_documents' => false,
             ],
         ])->getBody()->getContents();
 
         $result = \json_decode($response, true);
 
-        return \array_map(function ($item) use ($documents) {
+        return \array_map(function (array $item) use ($documents): Document {
             $document = $documents[$item['index']];
             $document->setScore($item['relevance_score']);
             return $document;

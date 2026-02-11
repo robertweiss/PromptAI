@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\StructuredOutput;
 
 use ReflectionClass;
@@ -11,11 +13,6 @@ use ReflectionProperty;
 
 class JsonSchema
 {
-    /**
-     * Store processed class definitions to avoid duplication
-     */
-    private array $definitions = [];
-
     /**
      * Track classes being processed to prevent infinite recursion
      */
@@ -30,55 +27,48 @@ class JsonSchema
      */
     public function generate(string $class): array
     {
-        // Reset definitions for a new generation
-        $this->definitions = [];
+        // Reset processed classes for a new generation
         $this->processedClasses = [];
 
         // Generate the main schema
-        $schema = [
+        return [
             ...$this->generateClassSchema($class),
             'additionalProperties' => false,
         ];
-
-        // Add definitions if any exist
-        if (!empty($this->definitions)) {
-            $schema['definitions'] = \array_map(fn (array $definition) => [...$definition, 'additionalProperties' => false], $this->definitions);
-        }
-
-        return $schema;
     }
 
     /**
      * Generate schema for a class
      *
      * @param string $class Class name
-     * @param bool $isRoot Whether this is the root schema
-     * @return array The schema or reference
+     * @return array The schema
      * @throws ReflectionException
      */
-    private function generateClassSchema(string $class, bool $isRoot = true): array
+    private function generateClassSchema(string $class): array
     {
         $reflection = new ReflectionClass($class);
-        $className = $reflection->getShortName();
 
-        // If we've already processed this class, and it's not the root, return a reference
-        if (!$isRoot && in_array($class, $this->processedClasses)) {
-            return [
-                '$ref' => '#/definitions/' . $className,
-            ];
+        // Check for circular reference
+        if (\in_array($class, $this->processedClasses)) {
+            // For circular references, return a simple object schema to break the cycle
+            return ['type' => 'object'];
         }
 
         $this->processedClasses[] = $class;
 
         // Handle enum types differently
         if ($reflection->isEnum()) {
-            return $this->processEnum(new ReflectionEnum($class), $isRoot);
+            $result = $this->processEnum(new ReflectionEnum($class));
+            // Remove the class from the processed list after processing
+            \array_pop($this->processedClasses);
+            return $result;
         }
 
         // Create a basic object schema
         $schema = [
             'type' => 'object',
             'properties' => [],
+            'additionalProperties' => false,
         ];
 
         $requiredProperties = [];
@@ -93,8 +83,8 @@ class JsonSchema
             $schema['properties'][$propertyName] = $this->processProperty($property);
 
             $attribute = $this->getPropertyAttribute($property);
-            if (!empty($attribute) && $attribute->required !== null) {
-                if ($attribute->required === true) {
+            if ($attribute instanceof SchemaProperty && $attribute->required !== null) {
+                if ($attribute->required) {
                     $requiredProperties[] = $propertyName;
                 }
             } else {
@@ -111,17 +101,12 @@ class JsonSchema
         }
 
         // Add required properties
-        if (!empty($requiredProperties)) {
+        if ($requiredProperties !== []) {
             $schema['required'] = $requiredProperties;
         }
 
-        // If not root, add to definitions and return reference
-        if (!$isRoot) {
-            $this->definitions[$className] = $schema;
-            return [
-                '$ref' => '#/definitions/' . $className,
-            ];
-        }
+        // Remove the class from the processed list after processing
+        \array_pop($this->processedClasses);
 
         return $schema;
     }
@@ -129,7 +114,6 @@ class JsonSchema
     /**
      * Process a single property to generate its schema
      *
-     * @param ReflectionProperty $property
      * @return array Property schema
      * @throws ReflectionException
      */
@@ -139,7 +123,7 @@ class JsonSchema
 
         // Process Property attribute if present
         $attribute = $this->getPropertyAttribute($property);
-        if (!empty($attribute)) {
+        if ($attribute instanceof SchemaProperty) {
             if ($attribute->title !== null) {
                 $schema['title'] = $attribute->title;
             }
@@ -165,15 +149,15 @@ class JsonSchema
             // Parse PHPDoc for the array item type
             $docComment = $property->getDocComment();
             if ($docComment) {
-                // Extract type from @var array<Type>
-                preg_match('/@var\s+([a-zA-Z_\\\\]+)\[\]/', $docComment, $matches);
+                // Extract type from both "@var \App\Type[]" and "@var array<\App\Type>"
+                \preg_match('/@var\s+(?:([a-zA-Z0-9_\\\\]+)\[\]|array<([a-zA-Z0-9_\\\\]+)>)/', $docComment, $matches);
 
-                if (isset($matches[1])) {
-                    $itemType = trim($matches[1]);
+                if (isset($matches[1]) || isset($matches[2])) {
+                    $itemType = empty($matches[1]) ? ((isset($matches[2]) && $matches[2] !== '0') ? $matches[2] : null) : ($matches[1]);
 
                     // Handle class type for array items
-                    if (class_exists($itemType) || enum_exists($itemType)) {
-                        $schema['items'] = $this->generateClassSchema($itemType, false);
+                    if (\class_exists($itemType) || \enum_exists($itemType)) {
+                        $schema['items'] = $this->generateClassSchema($itemType);
                     } else {
                         // Basic type
                         $schema['items'] = $this->getBasicTypeSchema($itemType);
@@ -188,25 +172,19 @@ class JsonSchema
             }
         }
         // Handle enum types
-        elseif ($typeName && enum_exists($typeName)) {
+        elseif ($typeName && \enum_exists($typeName)) {
             $enumReflection = new ReflectionEnum($typeName);
-            $this->processEnum($enumReflection); // Ensure enum is in definitions
-
-            $schema['allOf'] = [
-                [
-                    '$ref' => '#/definitions/' . $enumReflection->getShortName(),
-                ],
-            ];
+            $schema = \array_merge($schema, $this->processEnum($enumReflection));
         }
         // Handle class types
-        elseif ($typeName && class_exists($typeName)) {
-            $classSchema = $this->generateClassSchema($typeName, false);
-            $schema = array_merge($schema, $classSchema);
+        elseif ($typeName && \class_exists($typeName)) {
+            $classSchema = $this->generateClassSchema($typeName);
+            $schema = \array_merge($schema, $classSchema);
         }
         // Handle basic types
         elseif ($typeName) {
             $typeSchema = $this->getBasicTypeSchema($typeName);
-            $schema = array_merge($schema, $typeSchema);
+            $schema = \array_merge($schema, $typeSchema);
         } else {
             // Default to string if no type hint
             $schema['type'] = 'string';
@@ -214,8 +192,8 @@ class JsonSchema
 
         // Handle nullable types - for basic types only
         if ($type && $type->allowsNull() && isset($schema['type']) && !isset($schema['$ref']) && !isset($schema['allOf'])) {
-            if (is_array($schema['type'])) {
-                if (!in_array('null', $schema['type'])) {
+            if (\is_array($schema['type'])) {
+                if (!\in_array('null', $schema['type'])) {
                     $schema['type'][] = 'null';
                 }
             } else {
@@ -228,22 +206,9 @@ class JsonSchema
 
     /**
      * Process an enum to generate its schema
-     *
-     * @param ReflectionEnum $enum
-     * @param bool $isRoot
-     * @return array
      */
-    private function processEnum(ReflectionEnum $enum, bool $isRoot = false): array
+    private function processEnum(ReflectionEnum $enum): array
     {
-        $enumName = $enum->getShortName();
-
-        // Return reference if already processed
-        if (!$isRoot && isset($this->definitions[$enumName])) {
-            return [
-                '$ref' => '#/definitions/' . $enumName,
-            ];
-        }
-
         // Create enum schema
         $schema = [
             'type' => 'string',
@@ -262,27 +227,16 @@ class JsonSchema
             }
         }
 
-        // Add to definitions if not root schema
-        if (!$isRoot) {
-            $this->definitions[$enumName] = $schema;
-            return [
-                '$ref' => '#/definitions/' . $enumName,
-            ];
-        }
-
         return $schema;
     }
 
     /**
      * Get the Property attribute if it exists on a property
-     *
-     * @param ReflectionProperty $property
-     * @return SchemaProperty|null
      */
     private function getPropertyAttribute(ReflectionProperty $property): ?SchemaProperty
     {
         $attributes = $property->getAttributes(SchemaProperty::class);
-        if (!empty($attributes)) {
+        if ($attributes !== []) {
             return $attributes[0]->newInstance();
         }
         return null;
@@ -321,9 +275,11 @@ class JsonSchema
 
             default:
                 // Check if it's a class or enum
-                if (class_exists($type)) {
-                    return $this->generateClassSchema($type, false);
-                } elseif (enum_exists($type)) {
+                if (\class_exists($type)) {
+                    return $this->generateClassSchema($type);
+                }
+                // Check if it's a class or enum
+                if (\enum_exists($type)) {
                     return $this->processEnum(new ReflectionEnum($type));
                 }
 

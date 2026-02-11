@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Observability;
 
 use NeuronAI\Observability\Events\WorkflowEnd;
@@ -10,7 +12,7 @@ use NeuronAI\Workflow\Edge;
 
 trait HandleWorkflowEvents
 {
-    public function workflowStart(\SplSubject $workflow, string $event, WorkflowStart $data)
+    public function workflowStart(\SplSubject $workflow, string $event, WorkflowStart $data): void
     {
         if (!$this->inspector->isRecording()) {
             return;
@@ -21,21 +23,19 @@ trait HandleWorkflowEvents
                 ->setType('neuron-workflow')
                 ->addContext('List', [
                     'nodes' => \array_keys($data->nodes),
-                    'edges' => \array_map(function (Edge $edge) {
-                        return [
-                            'from' => $edge->getFrom(),
-                            'to' => $edge->getTo(),
-                            'has_condition' => $edge->hasCondition(),
-                        ];
-                    }, $data->edges)
+                    'edges' => \array_map(fn (Edge $edge): array => [
+                        'from' => $edge->getFrom(),
+                        'to' => $edge->getTo(),
+                        'has_condition' => $edge->hasCondition(),
+                    ], $data->edges)
                 ]);
         } elseif ($this->inspector->canAddSegments()) {
-            $this->segments[$workflow::class] = $this->inspector->startSegment('neuron-workflow', $workflow::class)
+            $this->segments[$workflow::class] = $this->inspector->startSegment(self::SEGMENT_TYPE.'.workflow', $workflow::class)
                 ->setColor(self::SEGMENT_COLOR);
         }
     }
 
-    public function workflowEnd(\SplSubject $workflow, string $event, WorkflowEnd $data)
+    public function workflowEnd(\SplSubject $workflow, string $event, WorkflowEnd $data): void
     {
         if (\array_key_exists($workflow::class, $this->segments)) {
             $this->segments[$workflow::class]
@@ -48,24 +48,24 @@ trait HandleWorkflowEvents
         }
     }
 
-    public function workflowNodeStart(\SplSubject $workflow, string $event, WorkflowNodeStart $data)
+    public function workflowNodeStart(\SplSubject $workflow, string $event, WorkflowNodeStart $data): void
     {
         if (!$this->inspector->canAddSegments()) {
             return;
         }
 
         $segment = $this->inspector
-            ->startSegment('workflow-node', $data->node)
+            ->startSegment(self::SEGMENT_TYPE.'.workflow', $data->node)
             ->setColor(self::SEGMENT_COLOR);
-        $segment->addContext('State', ['before' => $data->state->all()]);
+        $segment->addContext('Before', $data->state->all());
         $this->segments[$data->node] = $segment;
     }
 
-    public function workflowNodeEnd(\SplSubject $workflow, string $event, WorkflowNodeEnd $data)
+    public function workflowNodeEnd(\SplSubject $workflow, string $event, WorkflowNodeEnd $data): void
     {
         if (\array_key_exists($data->node, $this->segments)) {
             $segment = $this->segments[$data->node]->end();
-            $segment->addContext('State', \array_merge($segment->getContext('State'), ['after' => $data->state->all()]));
+            $segment->addContext('After', $data->state->all());
         }
     }
 }

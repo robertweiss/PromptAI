@@ -1,13 +1,17 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Ollama;
 
 use GuzzleHttp\Client;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
+use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\Providers\HasGuzzleClient;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HttpClientOptions;
 use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\ToolPropertyInterface;
@@ -22,21 +26,26 @@ class Ollama implements AIProviderInterface
 
     protected ?string $system = null;
 
-    /**
-     * The component responsible for mapping the NeuronAI Message to the AI provider format.
-     *
-     * @var MessageMapperInterface
-     */
     protected MessageMapperInterface $messageMapper;
 
+    /**
+     * @param array<string, mixed> $parameters
+     */
     public function __construct(
         protected string $url, // http://localhost:11434/api
         protected string $model,
         protected array $parameters = [],
+        protected ?HttpClientOptions $httpOptions = null,
     ) {
-        $this->client = new Client([
-            'base_uri' => trim($this->url, '/').'/',
-        ]);
+        $config = [
+            'base_uri' => \trim($this->url, '/').'/',
+        ];
+
+        if ($this->httpOptions instanceof HttpClientOptions) {
+            $config = $this->mergeHttpOptions($config, $this->httpOptions);
+        }
+
+        $this->client = new Client($config);
     }
 
     public function systemPrompt(?string $prompt): AIProviderInterface
@@ -48,15 +57,15 @@ class Ollama implements AIProviderInterface
 
     public function messageMapper(): MessageMapperInterface
     {
-        if (!isset($this->messageMapper)) {
-            $this->messageMapper = new MessageMapper();
-        }
-        return $this->messageMapper;
+        return $this->messageMapper ?? $this->messageMapper = new MessageMapper();
     }
 
+    /**
+     * @return array<int, array<string, mixed>>
+     */
     protected function generateToolsPayload(): array
     {
-        return \array_map(function (ToolInterface $tool) {
+        return \array_map(function (ToolInterface $tool): array {
             $payload = [
                 'type' => 'function',
                 'function' => [
@@ -70,7 +79,7 @@ class Ollama implements AIProviderInterface
                 ],
             ];
 
-            $properties = \array_reduce($tool->getProperties(), function (array $carry, ToolPropertyInterface $property) {
+            $properties = \array_reduce($tool->getProperties(), function (array $carry, ToolPropertyInterface $property): array {
                 $carry[$property->getName()] = [
                     'type' => $property->getType()->value,
                     'description' => $property->getDescription(),
@@ -91,9 +100,13 @@ class Ollama implements AIProviderInterface
         }, $this->tools);
     }
 
+    /**
+     * @param array<string, mixed> $message
+     * @throws ProviderException
+     */
     protected function createToolCallMessage(array $message): Message
     {
-        $tools = \array_map(fn (array $item) => $this->findTool($item['function']['name'])
+        $tools = \array_map(fn (array $item): ToolInterface => $this->findTool($item['function']['name'])
             ->setInputs($item['function']['arguments']), $message['tool_calls']);
 
         $result = new ToolCallMessage(

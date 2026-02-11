@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\StructuredOutput\Validation;
 
 class Validator
@@ -7,8 +9,6 @@ class Validator
     /**
      * Validate an object
      *
-     * @param mixed $obj
-     * @return array
      * @throws \ReflectionException
      */
     public static function validate(mixed $obj): array

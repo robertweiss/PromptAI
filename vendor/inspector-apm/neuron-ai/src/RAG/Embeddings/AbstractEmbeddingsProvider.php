@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\Embeddings;
 
 use NeuronAI\RAG\Document;
@@ -8,7 +10,6 @@ abstract class AbstractEmbeddingsProvider implements EmbeddingsProviderInterface
 {
     public function embedDocuments(array $documents): array
     {
-        /** @var Document $document */
         foreach ($documents as $index => $document) {
             $documents[$index] = $this->embedDocument($document);
         }

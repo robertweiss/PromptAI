@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\StructuredOutput\Validation\Rules;
 
 use NeuronAI\StructuredOutput\StructuredOutputException;
@@ -14,7 +16,7 @@ class Count extends AbstractValidationRule
     ) {
     }
 
-    public function validate(string $name, mixed $value, array &$violations)
+    public function validate(string $name, mixed $value, array &$violations): void
     {
         if (null !== $this->exactly && null === $this->min && null === $this->max) {
             $this->min = $this->max = $this->exactly;
@@ -24,7 +26,7 @@ class Count extends AbstractValidationRule
             throw new StructuredOutputException('Either option "min" or "max" must be given for validation rule "Length"');
         }
 
-        if (is_null($value) && ($this->min > 0 || $this->exactly > 0)) {
+        if (\is_null($value) && ($this->min > 0 || $this->exactly > 0)) {
             $violations[] = $this->buildMessage($name, '{name} cannot be empty');
             return;
         }

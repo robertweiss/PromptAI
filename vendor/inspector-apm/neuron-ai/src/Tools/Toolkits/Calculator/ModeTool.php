@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Calculator;
 
 use NeuronAI\Tools\ArrayProperty;
@@ -43,32 +45,30 @@ DESC
     public function __invoke(array $numbers): array
     {
         // Validate input
-        if (empty($numbers)) {
+        if ($numbers === []) {
             return ['error' => 'Data array cannot be empty'];
         }
 
         // Filter and validate numeric values
-        $numericData = array_filter($numbers, function ($value) {
-            return is_numeric($value);
-        });
+        $numericData = \array_filter($numbers, fn (string|int|float $value): bool => \is_numeric($value));
 
-        if (empty($numericData)) {
+        if ($numericData === []) {
             return ['error' => 'Data array must contain at least one numeric value'];
         }
 
         // Convert to float values
-        $numericData = array_map('floatval', $numericData);
+        $numericData = \array_map('floatval', $numericData);
 
         // Count frequency of each value
-        $frequencies = array_count_values($numericData);
-        $maxFrequency = max($frequencies);
+        $frequencies = \array_count_values($numericData);
+        $maxFrequency = \max($frequencies);
 
         // Find all values with maximum frequency
-        $modes = array_keys($frequencies, $maxFrequency);
+        $modes = \array_keys($frequencies, $maxFrequency);
 
         // Convert back to numeric values and sort
-        $modes = array_map('floatval', $modes);
-        sort($modes);
+        $modes = \array_map('floatval', $modes);
+        \sort($modes);
 
         return $modes;
     }

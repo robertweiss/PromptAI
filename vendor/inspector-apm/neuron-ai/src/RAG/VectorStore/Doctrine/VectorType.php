@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\VectorStore\Doctrine;
 
 use Doctrine\DBAL\Exception;
@@ -15,12 +17,12 @@ class VectorType extends Type
      */
     public function getSQLDeclaration(array $column, AbstractPlatform $platform): string
     {
-        $platformClass = get_class($platform);
+        $platformClass = $platform::class;
 
-        $parts = explode('\\', $platformClass);
-        $shortName = end($parts); // e.g., 'PostgreSQLPlatform'
+        $parts = \explode('\\', $platformClass);
+        $shortName = \end($parts); // e.g., 'PostgreSQLPlatform'
 
-        $shortName =  strtolower(str_replace('Platform', '', $shortName)); // e.g., 'postgresql'
+        $shortName =  \strtolower(\str_replace('Platform', '', $shortName)); // e.g., 'postgresql'
 
         if (! \in_array($shortName, SupportedDoctrineVectorStore::values())) {
             throw Exception::notSupported('VECTORs not supported by Platform. ' . $shortName);
@@ -34,11 +36,11 @@ class VectorType extends Type
             throw Exception::notSupported('VECTORs must have a length greater than 0.');
         }
 
-        if (! is_int($column['length'])) {
+        if (! \is_int($column['length'])) {
             throw Exception::notSupported('VECTORs must have a length that is an integer.');
         }
 
-        return sprintf('vector(%d)', $column['length']);
+        return \sprintf('vector(%d)', $column['length']);
     }
 
     /**
@@ -50,13 +52,13 @@ class VectorType extends Type
             return [];
         }
 
-        $value = is_resource($value) ? stream_get_contents($value) : $value;
+        $value = \is_resource($value) ? \stream_get_contents($value) : $value;
 
-        if (! is_string($value)) {
+        if (! \is_string($value)) {
             throw Exception::notSupported('Error while converting VECTORs to PHP value.');
         }
 
-        $convertedValue = explode(',', $value);
+        $convertedValue = \explode(',', $value);
         $floatArray = [];
         foreach ($convertedValue as $singleConvertedValue) {
             $floatArray[] = (float) $singleConvertedValue;
@@ -68,7 +70,7 @@ class VectorType extends Type
     public function convertToDatabaseValue(mixed $value, AbstractPlatform $platform): string
     {
         //If $value is not a float array throw an exception
-        if (! is_array($value)) {
+        if (! \is_array($value)) {
             throw Exception::notSupported('VECTORs must be an array.');
         }
 

@@ -1,6 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG;
+
+use NeuronAI\UniqueIdGenerator;
 
 class Document implements \JsonSerializable
 {
@@ -19,7 +23,7 @@ class Document implements \JsonSerializable
     public function __construct(
         public string $content = '',
     ) {
-        $this->id = \uniqid();
+        $this->id = UniqueIdGenerator::generateId();
     }
 
     public function getId(): string|int

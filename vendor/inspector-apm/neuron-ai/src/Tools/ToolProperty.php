@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools;
 
 use NeuronAI\StaticConstructor;
@@ -14,15 +16,12 @@ class ToolProperty implements ToolPropertyInterface
     public function __construct(
         protected string $name,
         protected PropertyType $type,
-        protected string $description,
+        protected ?string $description = null,
         protected bool $required = false,
         protected array $enum = [],
     ) {
     }
 
-    /**
-     * @return array
-     */
     public function jsonSerialize(): array
     {
         return [
@@ -49,7 +48,7 @@ class ToolProperty implements ToolPropertyInterface
         return $this->type;
     }
 
-    public function getDescription(): string
+    public function getDescription(): ?string
     {
         return $this->description;
     }
@@ -63,10 +62,13 @@ class ToolProperty implements ToolPropertyInterface
     {
         $schema = [
             'type' => $this->type->value,
-            'description' => $this->description,
         ];
 
-        if (!empty($this->enum)) {
+        if (!\is_null($this->description)) {
+            $schema['description'] = $this->description;
+        }
+
+        if ($this->enum !== []) {
             $schema['enum'] = $this->enum;
         }
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Ollama;
 
 use NeuronAI\Chat\Enums\MessageRole;
@@ -28,7 +30,7 @@ trait HandleStream
 
         $stream = $this->client->post('chat', [
             'stream' => true,
-            ...\compact('json')
+            ...['json' => $json]
         ])->getBody();
 
         while (! $stream->eof()) {
@@ -36,7 +38,7 @@ trait HandleStream
                 continue;
             }
 
-            // Last chunk will contains the usage information.
+            // Last chunk will contain the usage information.
             if ($line['done'] === true) {
                 yield \json_encode(['usage' => [
                     'input_tokens' => $line['prompt_eval_count'],
@@ -46,8 +48,11 @@ trait HandleStream
             }
 
             // Process tool calls
-            // Ollama doesn't support tool calls for stream response
-            // https://github.com/ollama/ollama/blob/main/docs/api.md
+            if (isset($line['message']['tool_calls'])) {
+                yield from $executeToolsCallback(
+                    $this->createToolCallMessage($line['message'])
+                );
+            }
 
             // Process regular content
             $content = $line['message']['content'] ?? '';
@@ -64,7 +69,7 @@ trait HandleStream
             return null;
         }
 
-        $json = \json_decode($line, true);
+        $json = \json_decode((string) $line, true);
 
         if ($json['done']) {
             return null;

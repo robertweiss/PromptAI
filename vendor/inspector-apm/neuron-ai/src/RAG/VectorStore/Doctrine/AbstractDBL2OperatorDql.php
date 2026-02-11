@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\VectorStore\Doctrine;
 
 use Doctrine\ORM\Query\AST\Functions\FunctionNode;
@@ -14,7 +16,7 @@ abstract class AbstractDBL2OperatorDql extends FunctionNode
 
     public function parse(Parser $parser): void
     {
-        if (class_exists(\Doctrine\ORM\Query\TokenType::class)) {
+        if (\class_exists(\Doctrine\ORM\Query\TokenType::class)) {
             $parser->match(\Doctrine\ORM\Query\TokenType::T_IDENTIFIER);
             $parser->match(\Doctrine\ORM\Query\TokenType::T_OPEN_PARENTHESIS);
         } else {
@@ -24,7 +26,7 @@ abstract class AbstractDBL2OperatorDql extends FunctionNode
 
         $this->vectorOne = $parser->ArithmeticFactor(); // Fix that, should be vector
 
-        if (class_exists(\Doctrine\ORM\Query\TokenType::class)) {
+        if (\class_exists(\Doctrine\ORM\Query\TokenType::class)) {
             $parser->match(\Doctrine\ORM\Query\TokenType::T_COMMA);
         } else {
             $parser->match(\Doctrine\ORM\Query\Lexer::T_COMMA);
@@ -32,7 +34,7 @@ abstract class AbstractDBL2OperatorDql extends FunctionNode
 
         $this->vectorTwo = $parser->ArithmeticFactor(); // Fix that, should be vector
 
-        if (class_exists(\Doctrine\ORM\Query\TokenType::class)) {
+        if (\class_exists(\Doctrine\ORM\Query\TokenType::class)) {
             $parser->match(\Doctrine\ORM\Query\TokenType::T_CLOSE_PARENTHESIS);
         } else {
             $parser->match(\Doctrine\ORM\Query\Lexer::T_CLOSE_PARENTHESIS);

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Calculator;
 
 use NeuronAI\Tools\PropertyType;
@@ -36,6 +38,6 @@ class ExponentialTool extends Tool
 
     public function __invoke(int|float $number, int $exponent): int|float
     {
-        return pow($number, $exponent);
+        return $number ** $exponent;
     }
 }

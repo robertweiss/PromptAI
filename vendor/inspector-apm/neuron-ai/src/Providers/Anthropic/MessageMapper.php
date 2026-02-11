@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Anthropic;
 
 use NeuronAI\Chat\Attachments\Attachment;
@@ -20,6 +22,8 @@ class MessageMapper implements MessageMapperInterface
 
     public function map(array $messages): array
     {
+        $this->mapping = [];
+
         foreach ($messages as $message) {
             match ($message::class) {
                 Message::class,
@@ -44,7 +48,7 @@ class MessageMapper implements MessageMapperInterface
 
         $attachments = $message->getAttachments();
 
-        if (is_string($payload['content']) && $attachments) {
+        if (\is_string($payload['content']) && $attachments) {
             $payload['content'] = [
                 [
                     'type' => 'text',
@@ -101,7 +105,7 @@ class MessageMapper implements MessageMapperInterface
     {
         $this->mapping[] = [
             'role' => MessageRole::USER,
-            'content' => \array_map(fn (ToolInterface $tool) => [
+            'content' => \array_map(fn (ToolInterface $tool): array => [
                 'type' => 'tool_result',
                 'tool_use_id' => $tool->getCallId(),
                 'content' => $tool->getResult(),

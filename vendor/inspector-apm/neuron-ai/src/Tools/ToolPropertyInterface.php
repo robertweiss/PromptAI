@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools;
 
 interface ToolPropertyInterface extends \JsonSerializable
@@ -8,7 +10,7 @@ interface ToolPropertyInterface extends \JsonSerializable
 
     public function getType(): PropertyType;
 
-    public function getDescription(): string;
+    public function getDescription(): ?string;
 
     public function isRequired(): bool;
 

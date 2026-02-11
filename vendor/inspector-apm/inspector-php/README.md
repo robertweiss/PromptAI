@@ -10,7 +10,7 @@ Code Execution Monitoring, built for PHP developers.
 
 ## Requirements
 
-- PHP >= 7.2.0
+- PHP >= ^8.1
 
 ## Install
 Install the latest version by:
@@ -32,7 +32,7 @@ $configuration = new Configuration('YOUR_INGESTION_KEY');
 $inspector = new Inspector($configuration);
 ```
 
-All start with a `transaction`. Transaction represent an execution cycle and it can contains one or hundred of segments:
+All start with a `transaction`. Transaction represents an execution cycle, and it can contain one or hundred of segments:
 
 ```php
 // Start an execution cycle with a transaction
@@ -53,7 +53,7 @@ echo $result; // this will print "Hello World!"
 Inspector will monitor your code execution in real time alerting you if something goes wrong.
 
 ## Custom Transport
-You can also set up custom transport class to transfer monitoring data from your server to Inspector
+You can also set up a custom transport class to transfer monitoring data from your server to Inspector
 in a personalized way.
 
 The transport class needs to implement `\Inspector\Transports\TransportInterface`:
@@ -72,7 +72,7 @@ class CustomTransport implements \Inspector\Transports\TransportInterface
 
     public function addEntry(\Inspector\Models\Model $entry)
     {
-        // Add an \Inspector\Models\Arrayable entry in the queue.
+        // Add an \Inspector\Models\Model entry in the queue.
         $this->queue[] = $entry;
     }
 
@@ -94,15 +94,26 @@ class CustomTransport implements \Inspector\Transports\TransportInterface
 ```
 
 Then you can set the new transport in the `Inspector` instance
-using a callback the will receive the current configuration state as parameter.
+using a callback that will receive the current configuration state as parameter.
 
 ```php
-$inspector->setTransport(function ($configuration) {
+$inspector->setTransport(function (\Inspector\Configuration $configuration) {
     return new CustomTransport($configuration);
 });
 ```
 
 **[Chek out the official documentation](https://docs.inspector.dev/php)**
+
+<a name="agentic"></a>
+
+## Agentic Integration
+
+You can connect the Inspector library documentation to your coding assistant as a Model Context Protocol (MCP) server.
+
+It makes it easy for tools like Claude Code, Cursor, and VS Code extensions reliably understand what Inspector
+client library can do, its configurations, how to use it.
+
+[AI Assisted Integration](https://docs.inspector.dev/concepts/agentic-integration)
 
 ## Contributing
 

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools;
 
 interface ToolInterface extends \JsonSerializable
@@ -12,7 +14,7 @@ interface ToolInterface extends \JsonSerializable
     /**
      * Get a description of the tool's functionality.
      */
-    public function getDescription(): string;
+    public function getDescription(): ?string;
 
     /**
      * Add a Property with a name, type, description, and optional required constraint.
@@ -56,7 +58,7 @@ interface ToolInterface extends \JsonSerializable
     public function setCallId(string $callId): ToolInterface;
 
 
-    public function getResult(): mixed;
+    public function getResult(): string;
 
     /**
      * Execute the tool's logic with input parameters.

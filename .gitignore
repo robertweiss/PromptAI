@@ -1,0 +1,4 @@
+tests/vendor/
+tests/*.sh
+tests/composer.lock
+.DS_Store

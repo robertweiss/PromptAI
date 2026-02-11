@@ -1,10 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\PGSQL;
 
 use NeuronAI\Tools\Toolkits\AbstractToolkit;
 use PDO;
 
+/**
+ * @method static make(Pdo $pdo)
+ */
 class PGSQLToolkit extends AbstractToolkit
 {
     public function __construct(protected PDO $pdo)

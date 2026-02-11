@@ -17,145 +17,6 @@ class PromptAIHelper {
         'ProcessWire\FieldtypeFile',
     ];
 
-    public static function migratePromptMatrix(PromptAI $module): void {
-        $currentConfig = $module->get('promptMatrix');
-
-        if (empty($currentConfig)) {
-            return;
-        }
-
-        // Check if already in JSON format
-        $jsonData = json_decode($currentConfig, true);
-        if (json_last_error() === JSON_ERROR_NONE && is_array($jsonData)) {
-            return; // Already migrated
-        }
-
-        // Parse old format and convert to new JSON format
-        $newConfig = [];
-        $promptMatrixRows = array_filter(array_map('trim', explode("\n", $currentConfig)));
-
-        foreach ($promptMatrixRows as $promptMatrixRow) {
-            $parts = explode('::', $promptMatrixRow);
-
-            $templateName = $parts[0] ?? '';
-            $sourceFieldName = $parts[1] ?? '';
-            $targetFieldName = $parts[2] ?? '';
-            $prompt = $parts[3] ?? '';
-            $label = $parts[4] ?? '';
-
-            // Skip if required fields are missing
-            if (empty($sourceFieldName) || empty($prompt)) {
-                continue;
-            }
-
-            // Convert names to IDs
-            $templateId = null;
-            if (!empty($templateName)) {
-                $template = wire('templates')->get($templateName);
-                $templateId = $template ? $template->id : null;
-            }
-
-            $sourceFieldId = null;
-            if (!empty($sourceFieldName)) {
-                $sourceField = wire('fields')->get($sourceFieldName);
-                $sourceFieldId = $sourceField ? $sourceField->id : null;
-            }
-
-            $targetFieldId = null;
-            if (!empty($targetFieldName)) {
-                $targetField = wire('fields')->get($targetFieldName);
-                $targetFieldId = $targetField ? $targetField->id : null;
-            }
-
-            // Only add if source field exists
-            if ($sourceFieldId) {
-                $newConfig[] = [
-                    'template' => $templateId,
-                    'sourceField' => $sourceFieldId,
-                    'targetField' => $targetFieldId,
-                    'prompt' => $prompt,
-                    'label' => $label,
-                ];
-            }
-        }
-
-        // Save new JSON format
-        $jsonConfig = json_encode($newConfig, JSON_PRETTY_PRINT);
-        $moduleConfig = wire('modules')->getConfig('PromptAI');
-        $moduleConfig['promptMatrix'] = $jsonConfig;
-        wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
-        $module->message(__('PromptAI configuration migrated to new format'));
-    }
-
-    public static function migrateTemplateToArray(PromptAI $module): void {
-        $currentConfig = $module->get('promptMatrix');
-
-        if (empty($currentConfig)) {
-            return;
-        }
-
-        // Parse JSON format
-        $jsonData = json_decode($currentConfig, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
-            return; // Invalid format, skip migration
-        }
-
-        $migrated = false;
-        foreach ($jsonData as &$config) {
-            // Check if template is a single integer and convert to array
-            if (isset($config['template']) && is_int($config['template'])) {
-                $config['template'] = [$config['template']];
-                $migrated = true;
-            }
-        }
-
-        // Save updated configuration if changes were made
-        if ($migrated) {
-            $jsonConfig = json_encode($jsonData, JSON_PRETTY_PRINT);
-            $moduleConfig = wire('modules')->getConfig('PromptAI');
-            $moduleConfig['promptMatrix'] = $jsonConfig;
-            wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
-            $module->message(__('PromptAI template configuration migrated to array format'));
-        }
-    }
-
-    public static function migrateOverwriteTargetToPrompts(PromptAI $module): void {
-        $moduleConfig = wire('modules')->getConfig('PromptAI');
-        $currentConfig = $moduleConfig['promptMatrix'] ?? '';
-        $globalOverwriteTarget = (bool)($moduleConfig['overwriteTarget'] ?? false);
-
-        if (empty($currentConfig)) {
-            return;
-        }
-
-        // Parse JSON format
-        $jsonData = json_decode($currentConfig, true);
-        if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
-            return; // Invalid format, skip migration
-        }
-
-        $migrated = false;
-        foreach ($jsonData as &$config) {
-            // Only migrate if overwriteTarget is not already set
-            if (!isset($config['overwriteTarget'])) {
-                $config['overwriteTarget'] = $globalOverwriteTarget;
-                $migrated = true;
-            }
-        }
-
-        // Save updated configuration if changes were made
-        if ($migrated) {
-            $jsonConfig = json_encode($jsonData, JSON_PRETTY_PRINT);
-            $moduleConfig = wire('modules')->getConfig('PromptAI');
-            $moduleConfig['promptMatrix'] = $jsonConfig;
-            wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
-            $module->message(__('PromptAI overwriteTarget configuration migrated to per-prompt setting'));
-        }
-    }
-
     public static function parsePromptMatrix(?string $promptMatrixString = '', $showErrors = false): array {
         $promptMatrix = [];
 
@@ -164,7 +25,6 @@ class PromptAIHelper {
             return $promptMatrix;
         }
 
-        // Parse JSON format (new format)
         $jsonData = json_decode($promptMatrixString, true);
         if (json_last_error() !== JSON_ERROR_NONE || !is_array($jsonData)) {
             if ($showErrors) {
@@ -179,21 +39,32 @@ class PromptAIHelper {
 
         foreach ($jsonData as $index => $config) {
             $promptMatrixEntity = new PromptMatrixEntity();
-            $promptMatrixEntity->template = $config['template'] ?? null;
-            $promptMatrixEntity->sourceField = $config['sourceField'] ?? null;
-            $promptMatrixEntity->targetField = $config['targetField'] ?? null;
+            $promptMatrixEntity->mode = $config['mode'] ?? 'page';
+            $promptMatrixEntity->templates = $config['templates'] ?? null;
+            $promptMatrixEntity->fields = $config['fields'] ?? null;
             $promptMatrixEntity->prompt = $config['prompt'] ?? null;
             $promptMatrixEntity->label = $config['label'] ?? null;
             $promptMatrixEntity->overwriteTarget = $config['overwriteTarget'] ?? false;
+            $promptMatrixEntity->targetSubfield = $config['targetSubfield'] ?? 'description';
 
             // Validation
-            if (!$promptMatrixEntity->sourceField) {
+            // Mode is required
+            if (!$promptMatrixEntity->mode || !in_array($promptMatrixEntity->mode, ['inline', 'page'])) {
                 if ($showErrors) {
-                    wire()->error(__('Source field is missing in configuration ').($index + 1));
+                    wire()->error(__('Mode is missing or invalid in configuration ').($index + 1));
                 }
                 continue;
             }
 
+            // Fields array is REQUIRED
+            if (!$promptMatrixEntity->fields || !is_array($promptMatrixEntity->fields) || empty($promptMatrixEntity->fields)) {
+                if ($showErrors) {
+                    wire()->error(__('Fields are missing in configuration ').($index + 1));
+                }
+                continue;
+            }
+
+            // Prompt is required
             if (!$promptMatrixEntity->prompt) {
                 if ($showErrors) {
                     wire()->error(__('Prompt is missing in configuration ').($index + 1));
@@ -202,8 +73,8 @@ class PromptAIHelper {
             }
 
             // Validate template IDs exist (if set)
-            if ($promptMatrixEntity->template && is_array($promptMatrixEntity->template)) {
-                foreach ($promptMatrixEntity->template as $templateId) {
+            if ($promptMatrixEntity->templates && is_array($promptMatrixEntity->templates)) {
+                foreach ($promptMatrixEntity->templates as $templateId) {
                     if (!array_key_exists($templateId, $availableTemplates)) {
                         if ($showErrors) {
                             wire()->error(__('Template ID ').$templateId.__(' does not exist in configuration ').($index + 1));
@@ -213,20 +84,14 @@ class PromptAIHelper {
                 }
             }
 
-            // Validate source field ID exists
-            if (!array_key_exists($promptMatrixEntity->sourceField, $availableFields)) {
-                if ($showErrors) {
-                    wire()->error(__('Source field ID does not exist in configuration ').($index + 1));
+            // Validate all field IDs exist
+            foreach ($promptMatrixEntity->fields as $fieldId) {
+                if (!array_key_exists($fieldId, $availableFields)) {
+                    if ($showErrors) {
+                        wire()->error(__('Field ID ').$fieldId.__(' does not exist in configuration ').($index + 1));
+                    }
+                    continue 2; // Skip this entire configuration
                 }
-                continue;
-            }
-
-            // Validate target field ID exists (if set)
-            if ($promptMatrixEntity->targetField && !array_key_exists($promptMatrixEntity->targetField, $availableFields)) {
-                if ($showErrors) {
-                    wire()->error(__('Target field ID does not exist in configuration ').($index + 1));
-                }
-                continue;
             }
 
             $promptMatrix[] = $promptMatrixEntity;
@@ -235,7 +100,7 @@ class PromptAIHelper {
         return $promptMatrix;
     }
 
-    public static function getFieldOptions() {
+    public static function getFieldOptions(): array {
         $fieldsOptions = [];
         if (wire('fields')) {
             /** @var Field $field */
@@ -255,7 +120,7 @@ class PromptAIHelper {
         return $fieldsOptions;
     }
 
-    public static function getTemplateOptions() {
+    public static function getTemplateOptions(): array {
         $templatesOptions = [];
         if (wire('templates')) {
             foreach (wire('templates') as $template) {
@@ -279,7 +144,7 @@ class PromptAIHelper {
         return $templatesOptions;
     }
 
-    public static function getRepeaterTemplateIdsForPage(Page $page) {
+    public static function getRepeaterTemplateIdsForPage(Page $page): array {
         $templatesIds = [];
         if (wire('templates')) {
             foreach (wire('templates') as $template) {
@@ -315,14 +180,14 @@ class PromptAIHelper {
 
         $relevantPrompts = [];
         foreach ($promptMatrix as $index => $promptMatrixEntity) {
-            if (PromptAIHelper::templateMatches($promptMatrixEntity->template, $template->id)) {
+            if (PromptAIHelper::templateMatches($promptMatrixEntity->templates, $template->id)) {
                 $relevantPrompts[$index] = $promptMatrixEntity;
                 continue;
             }
 
             // Handle repeater templates
-            if (is_array($promptMatrixEntity->template)) {
-                foreach ($promptMatrixEntity->template as $templateId) {
+            if (is_array($promptMatrixEntity->templates)) {
+                foreach ($promptMatrixEntity->templates as $templateId) {
                     $entityTemplate = wire('templates')->get($templateId);
                     if ($entityTemplate && str_starts_with($entityTemplate->name, 'repeater_')) {
                         $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
@@ -336,5 +201,148 @@ class PromptAIHelper {
         }
 
         return $relevantPrompts;
+    }
+
+    public static function getMediaType($filePath) {
+        $mimeType = mime_content_type($filePath);
+        $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
+
+        // Fallback-Mapping for problematic file types
+        $extensionMap = [
+            'csv' => 'text/csv',
+            'md' => 'text/markdown',
+        ];
+
+        if ($mimeType === 'text/plain' && isset($extensionMap[$extension])) {
+            return $extensionMap[$extension];
+        }
+
+        return $mimeType;
+    }
+
+    /**
+     * Determine repeater context from a page
+     *
+     * @param Page $page The page to check (could be parent or repeater item)
+     * @return array ['parentPage' => Page, 'repeaterItem' => Page|null]
+     */
+    public static function getRepeaterContext(Page $page): array {
+        $isRepeater = (strpos($page->template->name, 'repeater_') === 0);
+
+        return [
+            'parentPage' => $isRepeater ? $page->getForPage() : $page,
+            'repeaterItem' => $isRepeater ? $page : null,
+        ];
+    }
+
+    /**
+     * Substitute placeholders in prompt text with actual field values
+     *
+     * Supported placeholders:
+     * - {page.fieldname} - Field from the main/parent page
+     * - {item.fieldname} - Field from current repeater item (only in repeater context)
+     *
+     * @param string $prompt The prompt text with placeholders
+     * @param Page $page The main page being processed
+     * @param Page|null $repeaterItem Optional repeater item page for {item.*} placeholders
+     * @return string Prompt with placeholders replaced
+     */
+    public static function substitutePlaceholders(
+        string $prompt,
+        Page $page,
+        ?Page $repeaterItem = null
+    ): string {
+        /** @var PromptAI $module */
+        $module = wire('modules')->get('PromptAI');
+
+        // Pattern 1: {page.fieldname} - always references parent/main page
+        preg_match_all('/\{page\.([a-zA-Z0-9_]+)\}/', $prompt, $pageMatches, PREG_SET_ORDER);
+
+        foreach ($pageMatches as $match) {
+            $placeholder = $match[0]; // e.g., "{page.title}"
+            $fieldName = $match[1];   // e.g., "title"
+
+            $field = wire('fields')->get($fieldName);
+            $value = $page->get($fieldName);
+
+            // Handle non-existent or empty fields
+            if ($value === null || $value === '') {
+                $module->warning(__('Placeholder field not found or empty: ') . $placeholder);
+                $value = '';
+            }
+
+            // Convert to string (handle different field types)
+            $fieldtype = $field ? $field->type : null;
+            $value = $module->fieldValueToString($value, $fieldtype);
+
+            $prompt = str_replace($placeholder, $value, $prompt);
+        }
+
+        // Pattern 2: {item.fieldname} - only available in repeater context
+        if ($repeaterItem !== null) {
+            preg_match_all('/\{item\.([a-zA-Z0-9_]+)\}/', $prompt, $itemMatches, PREG_SET_ORDER);
+
+            foreach ($itemMatches as $match) {
+                $placeholder = $match[0]; // e.g., "{item.title}"
+                $fieldName = $match[1];   // e.g., "title"
+
+                $field = wire('fields')->get($fieldName);
+                $value = $repeaterItem->get($fieldName);
+
+                if ($value === null || $value === '') {
+                    $module->warning(__('Placeholder field not found or empty: ') . $placeholder);
+                    $value = '';
+                }
+
+                $fieldtype = $field ? $field->type : null;
+                /** @var PromptAI $module */
+                $module = wire('modules')->get('PromptAI');
+                $value = $module->fieldValueToString($value, $fieldtype);
+
+                $prompt = str_replace($placeholder, $value, $prompt);
+            }
+        } else {
+            // Warn if {item.*} used outside repeater context
+            if (preg_match('/\{item\.[a-zA-Z0-9_]+\}/', $prompt)) {
+                $module->warning(__('Placeholder {item.*} used outside repeater context'));
+            }
+        }
+
+        return $prompt;
+    }
+
+    /**
+     * Substitute placeholders in prompt and prepare for AI chat
+     *
+     * This wrapper method:
+     * - Substitutes placeholders ({page.field} and {item.field})
+     * - Builds final prompt
+     * - Returns the prompt ready for AI chat
+     *
+     * @param string $prompt The prompt text with placeholders
+     * @param Page $page The parent/main page being processed
+     * @param string $content Optional content to append after prompt
+     * @param Page|null $repeaterItem Optional repeater item for {item.*} placeholders
+     * @return string Final prompt with placeholders substituted
+     */
+    public static function substituteAndPreparePrompt(
+        string $prompt,
+        Page $page,
+        string $content = '',
+        ?Page $repeaterItem = null
+    ): string {
+        // Substitute placeholders
+        $substitutedPrompt = self::substitutePlaceholders(
+            $prompt,
+            $page,
+            $repeaterItem
+        );
+
+        // Combine with content if provided
+        if ($content) {
+            return trim($substitutedPrompt . PHP_EOL . $content);
+        }
+
+        return $substitutedPrompt;
     }
 }

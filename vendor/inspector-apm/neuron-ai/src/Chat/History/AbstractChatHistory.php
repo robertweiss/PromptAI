@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Chat\History;
 
 use NeuronAI\Chat\Attachments\Document;
@@ -13,60 +15,58 @@ use NeuronAI\Chat\Messages\ToolCallMessage;
 use NeuronAI\Chat\Messages\ToolCallResultMessage;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Chat\Messages\UserMessage;
+use NeuronAI\Exceptions\ChatHistoryException;
 use NeuronAI\Tools\Tool;
 
 abstract class AbstractChatHistory implements ChatHistoryInterface
 {
+    /**
+     * @var Message[]
+     */
     protected array $history = [];
 
-    public function __construct(protected int $contextWindow = 50000)
-    {
+    public function __construct(
+        protected int $contextWindow = 50000,
+        protected TokenCounterInterface $tokenCounter = new TokenCounter()
+    ) {
     }
 
-    protected function updateUsedTokens(Message $message): void
-    {
-        if ($message->getUsage()) {
-            // For every new message, we store only the marginal contribution of input tokens
-            // of the latest interactions.
-            $previousInputConsumption = \array_reduce($this->history, function ($carry, Message $message) {
-                if ($message->getUsage()) {
-                    $carry += $message->getUsage()->inputTokens;
-                }
-                return $carry;
-            }, 0);
+    /**
+     * @param Message[] $messages
+     */
+    abstract public function setMessages(array $messages): ChatHistoryInterface;
 
-            // Subtract the previous input consumption.
-            $message->getUsage()->inputTokens -= $previousInputConsumption;
-        }
-    }
+    abstract protected function clear(): ChatHistoryInterface;
 
     public function addMessage(Message $message): ChatHistoryInterface
     {
-        $this->updateUsedTokens($message);
-
         $this->history[] = $message;
-        $this->storeMessage($message);
 
-        $this->cutHistoryToContextWindow();
+        $this->trimHistory();
+
+        $this->setMessages($this->history);
 
         return $this;
     }
-
-    abstract protected function storeMessage(Message $message): ChatHistoryInterface;
 
     public function getMessages(): array
     {
         return $this->history;
     }
 
+    /**
+     * @throws ChatHistoryException
+     */
     public function getLastMessage(): Message
     {
-        return \end($this->history);
+        $message = \end($this->history);
+
+        if ($message === false) {
+            throw new ChatHistoryException('No messages in the chat history. It may have been filled with too large a message.');
+        }
+
+        return $message;
     }
-
-    abstract public function removeOldestMessage(): ChatHistoryInterface;
-
-    abstract protected function clear(): ChatHistoryInterface;
 
     public function flushAll(): ChatHistoryInterface
     {
@@ -77,49 +77,164 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
 
     public function calculateTotalUsage(): int
     {
-        return \array_reduce($this->history, function (int $carry, Message $message) {
-            if ($message->getUsage()) {
-                $carry += $message->getUsage()->getTotal();
-            }
-
-            return $carry;
-        }, 0);
+        return $this->tokenCounter->count($this->history);
     }
 
-    protected function cutHistoryToContextWindow(): void
+    protected function trimHistory(): void
     {
-        if ($this->getFreeMemory() >= 0) {
+        if ($this->history === []) {
             return;
         }
 
-        // Cut old messages
-        do {
-            $this->removeOldestMessage();
-            if (\array_shift($this->history) === null) {
+        $tokenCount = $this->tokenCounter->count($this->history);
+
+        // Early exit if all messages fit within the token limit
+        if ($tokenCount <= $this->contextWindow) {
+            $this->ensureValidMessageSequence();
+            return;
+        }
+
+        // Binary search to find how many messages to skip from the beginning
+        $skipFrom = $this->findMaxFittingMessages();
+
+        $this->history = \array_slice($this->history, $skipFrom);
+
+        // Ensure valid message sequence
+        $this->ensureValidMessageSequence();
+    }
+
+    /**
+     * Binary search to find the maximum number of messages that fit within the token limit.
+     *
+     * @return int The index of the first element to retain (keeping most recent messages) - 0 Skip no messages (include all) - count($this->history): Skip all messages (include none)
+     */
+    private function findMaxFittingMessages(): int
+    {
+        $totalMessages = \count($this->history);
+        $left = 0;
+        $right = $totalMessages;
+
+        while ($left < $right) {
+            $mid = \intval(($left + $right) / 2);
+            $subset = \array_slice($this->history, $mid);
+
+            if ($this->tokenCounter->count($subset) <= $this->contextWindow) {
+                // Fits! Try including more messages (skip fewer)
+                $right = $mid;
+            } else {
+                // Doesn't fit! Need to skip more messages
+                $left = $mid + 1;
+            }
+        }
+
+        return $left;
+    }
+
+    /**
+     * Ensures the message list:
+     * 1. Starts with a UserMessage
+     * 2. Ends with an AssistantMessage
+     * 3. Maintains tool call/result pairs
+     */
+    protected function ensureValidMessageSequence(): void
+    {
+        // Ensure it starts with a UserMessage
+        $this->ensureStartsWithUser();
+
+        // Ensure it ends with an AssistantMessage
+        $this->ensureValidAlternation();
+    }
+
+    /**
+     * Ensures the message list starts with a UserMessage.
+     */
+    protected function ensureStartsWithUser(): void
+    {
+        // Find the first UserMessage
+        $firstUserIndex = null;
+        foreach ($this->history as $index => $message) {
+            if ($message->getRole() === MessageRole::USER->value) {
+                $firstUserIndex = $index;
                 break;
             }
-        } while ($this->getFreeMemory() < 0);
+        }
+
+        if ($firstUserIndex === null) {
+            // No UserMessage found
+            $this->history = [];
+            return;
+        }
+
+        if ($firstUserIndex === 0) {
+            return;
+        }
+
+        if ($firstUserIndex > 0) {
+            // Remove messages before the first user message
+            $this->history = \array_slice($this->history, $firstUserIndex);
+        }
     }
 
-    public function getFreeMemory(): int
+    /**
+     * Ensures valid alternation between user and assistant messages.
+     */
+    protected function ensureValidAlternation(): void
     {
-        return $this->contextWindow - $this->calculateTotalUsage();
+        $result = [];
+        $expectingRole = [MessageRole::USER->value]; // Should start with user
+
+        foreach ($this->history as $message) {
+            $messageRole = $message->getRole();
+
+            // Tool result messages have a special case - they're user messages
+            // but can only follow tool call messages (assistant)
+            // This is valid after a ToolCallMessage
+            if ($message instanceof ToolCallResultMessage && ($result !== [] && $result[\count($result) - 1] instanceof ToolCallMessage)) {
+                $result[] = $message;
+                // After the tool result, we expect assistant again
+                $expectingRole = [MessageRole::ASSISTANT->value, MessageRole::MODEL->value];
+                continue;
+            }
+
+            // Check if this message has the expected role
+            if (\in_array($messageRole, $expectingRole, true)) {
+                $result[] = $message;
+                // Toggle the expected role
+                $expectingRole = ($expectingRole === [MessageRole::USER->value])
+                    ? [MessageRole::ASSISTANT->value, MessageRole::MODEL->value]
+                    : [MessageRole::USER->value];
+            }
+            // If not the expected role, we have an invalid alternation
+            // Skip this message to maintain a valid sequence
+        }
+
+        $this->history = $result;
     }
 
+    /**
+     * @return array<int, mixed>
+     */
     public function jsonSerialize(): array
     {
         return $this->getMessages();
     }
 
+    /**
+     * @param array<string, mixed> $messages
+     * @return  Message[]
+     */
     protected function deserializeMessages(array $messages): array
     {
-        return \array_map(fn (array $message) => match ($message['type'] ?? null) {
+        return \array_map(fn (array $message): Message => match ($message['type'] ?? null) {
             'tool_call' => $this->deserializeToolCall($message),
             'tool_call_result' => $this->deserializeToolCallResult($message),
             default => $this->deserializeMessage($message),
         }, $messages);
     }
 
+    /**
+     * @param array<string, mixed> $message
+     */
     protected function deserializeMessage(array $message): Message
     {
         $messageRole = MessageRole::from($message['role']);
@@ -136,6 +251,9 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $message
+     */
     protected function deserializeToolCall(array $message): ToolCallMessage
     {
         $tools = \array_map(fn (array $tool) => Tool::make($tool['name'], $tool['description'])
@@ -149,6 +267,9 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
         return $item;
     }
 
+    /**
+     * @param array<string, mixed> $message
+     */
     protected function deserializeToolCallResult(array $message): ToolCallResultMessage
     {
         $tools = \array_map(fn (array $tool) => Tool::make($tool['name'], $tool['description'])
@@ -160,14 +281,15 @@ abstract class AbstractChatHistory implements ChatHistoryInterface
     }
 
     /**
-     * @param array $message
-     * @param Message $item
-     * @return void
+     * @param array<string, mixed> $message
      */
     protected function deserializeMeta(array $message, Message $item): void
     {
         foreach ($message as $key => $value) {
-            if ($key === 'role' || $key === 'content') {
+            if ($key === 'role') {
+                continue;
+            }
+            if ($key === 'content') {
                 continue;
             }
             if ($key === 'usage') {

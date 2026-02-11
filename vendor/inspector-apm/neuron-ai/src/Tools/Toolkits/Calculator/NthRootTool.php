@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Calculator;
 
 use NeuronAI\Tools\PropertyType;
@@ -33,7 +35,7 @@ DESC
                 required: true,
             ),
             new ToolProperty(
-                name: 'root_degree ',
+                name: 'root_degree',
                 type: PropertyType::INTEGER,
                 description: 'The degree of the root (e.g., 2 for square root, 3 for cube root, 4 for fourth root, etc.). Must be a positive number.',
                 required: true,
@@ -43,6 +45,6 @@ DESC
 
     public function __invoke(float|int $number, int $root_degree): float|int
     {
-        return pow($number, 1 / $root_degree);
+        return $number ** (1 / $root_degree);
     }
 }

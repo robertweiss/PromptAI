@@ -1,11 +1,19 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools;
 
 use NeuronAI\Exceptions\ArrayPropertyException;
+use NeuronAI\StaticConstructor;
 
+/**
+ * @method static static make(string $name, string $description, bool $required = false, ?ToolPropertyInterface $items = null, ?int $minItems = null, ?int $maxItems = null)
+ */
 class ArrayProperty implements ToolPropertyInterface
 {
+    use StaticConstructor;
+
     protected PropertyType $type = PropertyType::ARRAY;
 
     /**
@@ -13,7 +21,7 @@ class ArrayProperty implements ToolPropertyInterface
      */
     public function __construct(
         protected string $name,
-        protected string $description,
+        protected ?string $description = null,
         protected bool $required = false,
         protected ?ToolPropertyInterface $items = null,
         protected ?int $minItems = null,
@@ -37,18 +45,21 @@ class ArrayProperty implements ToolPropertyInterface
     {
         $schema = [
             'type' => $this->type->value,
-            'description' => $this->description,
         ];
 
-        if (!empty($this->items)) {
+        if (!\is_null($this->description)) {
+            $schema['description'] = $this->description;
+        }
+
+        if ($this->items instanceof ToolPropertyInterface) {
             $schema['items'] = $this->items->getJsonSchema();
         }
 
-        if (!empty($this->minItems)) {
+        if ($this->minItems !== null && $this->minItems !== 0) {
             $schema['minItems'] = $this->minItems;
         }
 
-        if (!empty($this->maxItems)) {
+        if ($this->maxItems !== null && $this->maxItems !== 0) {
             $schema['maxItems'] = $this->maxItems;
         }
 
@@ -70,7 +81,7 @@ class ArrayProperty implements ToolPropertyInterface
         return $this->type;
     }
 
-    public function getDescription(): string
+    public function getDescription(): ?string
     {
         return $this->description;
     }

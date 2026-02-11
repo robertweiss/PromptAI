@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\OpenAI;
 
 use GuzzleHttp\Exception\GuzzleException;
@@ -26,7 +28,7 @@ trait HandleStream
             'model' => $this->model,
             'messages' => $this->messageMapper()->map($messages),
             'stream_options' => ['include_usage' => true],
-            ...$this->parameters
+            ...$this->parameters,
         ];
 
         // Attach tools
@@ -36,7 +38,7 @@ trait HandleStream
 
         $stream = $this->client->post('chat/completions', [
             'stream' => true,
-            ...\compact('json')
+            ...['json' => $json]
         ])->getBody();
 
         $text = '';
@@ -48,26 +50,25 @@ trait HandleStream
             }
 
             // Inform the agent about usage when stream
-            if (empty($line['choices']) && !empty($line['usage'])) {
+            if (!empty($line['usage'])) {
                 yield \json_encode(['usage' => [
                     'input_tokens' => $line['usage']['prompt_tokens'],
                     'output_tokens' => $line['usage']['completion_tokens'],
                 ]]);
-                continue;
             }
 
             if (empty($line['choices'])) {
                 continue;
             }
 
-            // Process tool calls
-            if (\array_key_exists('tool_calls', $line['choices'][0]['delta'])) {
+            // Compile tool calls
+            if (isset($line['choices'][0]['delta']['tool_calls'])) {
                 $toolCalls = $this->composeToolCalls($line, $toolCalls);
                 continue;
             }
 
             // Handle tool calls
-            if ($line['choices'][0]['finish_reason'] === 'tool_calls') {
+            if (isset($line['choices'][0]['finish_reason']) && $line['choices'][0]['finish_reason'] === 'tool_calls') {
                 yield from $executeToolsCallback(
                     $this->createToolCallMessage([
                         'content' => $text,
@@ -100,7 +101,7 @@ trait HandleStream
 
             if (!\array_key_exists($index, $toolCalls)) {
                 if ($name = $call['function']['name'] ?? null) {
-                    $toolCalls[$index]['function'] = ['name' => $name, 'arguments' => ''];
+                    $toolCalls[$index]['function'] = ['name' => $name, 'arguments' => $call['function']['arguments'] ?? ''];
                     $toolCalls[$index]['id'] = $call['id'];
                     $toolCalls[$index]['type'] = 'function';
                 }
@@ -119,18 +120,18 @@ trait HandleStream
     {
         $line = $this->readLine($stream);
 
-        if (! \str_starts_with($line, 'data:')) {
+        if (! \str_starts_with((string) $line, 'data:')) {
             return null;
         }
 
-        $line = \trim(\substr($line, \strlen('data: ')));
+        $line = \trim(\substr((string) $line, \strlen('data: ')));
 
         if (\str_contains($line, 'DONE')) {
             return null;
         }
 
         try {
-            return \json_decode($line, true, flags: JSON_THROW_ON_ERROR);
+            return \json_decode($line, true, flags: \JSON_THROW_ON_ERROR);
         } catch (\Throwable $exception) {
             throw new ProviderException('OpenAI streaming error - '.$exception->getMessage());
         }

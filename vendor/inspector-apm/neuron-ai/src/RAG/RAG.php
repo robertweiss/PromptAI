@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG;
 
 use NeuronAI\Agent;
@@ -8,12 +10,15 @@ use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Exceptions\AgentException;
 use NeuronAI\Observability\Events\PostProcessed;
 use NeuronAI\Observability\Events\PostProcessing;
-use NeuronAI\Observability\Events\VectorStoreResult;
-use NeuronAI\Observability\Events\VectorStoreSearching;
+use NeuronAI\Observability\Events\PreProcessed;
+use NeuronAI\Observability\Events\PreProcessing;
+use NeuronAI\Observability\Events\Retrieved;
+use NeuronAI\Observability\Events\Retrieving;
 use NeuronAI\Exceptions\MissingCallbackParameter;
 use NeuronAI\Exceptions\ToolCallableNotSet;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\RAG\PostProcessor\PostProcessorInterface;
+use NeuronAI\RAG\PreProcessor\PreProcessorInterface;
 
 /**
  * @method RAG withProvider(AIProviderInterface $provider)
@@ -24,7 +29,12 @@ class RAG extends Agent
     use ResolveEmbeddingProvider;
 
     /**
-     * @var PostprocessorInterface[]
+     * @var PreProcessorInterface[]
+     */
+    protected array $preProcessors = [];
+
+    /**
+     * @var PostProcessorInterface[]
      */
     protected array $postProcessors = [];
 
@@ -51,33 +61,44 @@ class RAG extends Agent
      */
     public function chat(Message|array $messages): Message
     {
-        if (\is_array($messages)) {
-            throw new AgentException('RAG does not accept arrays as input. Use a single Message object instead.');
-        }
+        $question = \is_array($messages) ? \end($messages) : $messages;
 
-        $this->notify('rag-start');
+        $this->notify('chat-rag-start');
 
-        $this->retrieval($messages);
+        $this->retrieval($question);
 
         $response = parent::chat($messages);
 
-        $this->notify('rag-stop');
+        $this->notify('chat-rag-stop');
         return $response;
     }
 
     public function stream(Message|array $messages): \Generator
     {
-        if (\is_array($messages)) {
-            throw new AgentException('RAG does not accept arrays as input. Use a single Message object instead.');
-        }
+        $question = \is_array($messages) ? \end($messages) : $messages;
 
-        $this->notify('rag-start');
+        $this->notify('stream-rag-start');
 
-        $this->retrieval($messages);
+        $this->retrieval($question);
 
         yield from parent::stream($messages);
 
-        $this->notify('rag-stop');
+        $this->notify('stream-rag-stop');
+    }
+
+    public function structured(Message|array $messages, ?string $class = null, int $maxRetries = 1): mixed
+    {
+        $question = \is_array($messages) ? \end($messages) : $messages;
+
+        $this->notify('structured-rag-start');
+
+        $this->retrieval($question);
+
+        $structured = parent::structured($messages, $class, $maxRetries);
+
+        $this->notify('structured-rag-stop');
+
+        return $structured;
     }
 
     protected function retrieval(Message $question): void
@@ -94,14 +115,16 @@ class RAG extends Agent
      */
     public function withDocumentsContext(array $documents): AgentInterface
     {
-        $originalInstructions = $this->instructions();
+        $originalInstructions = $this->resolveInstructions();
 
         // Remove the old context to avoid infinite grow
         $newInstructions = $this->removeDelimitedContent($originalInstructions, '<EXTRA-CONTEXT>', '</EXTRA-CONTEXT>');
 
         $newInstructions .= '<EXTRA-CONTEXT>';
         foreach ($documents as $document) {
-            $newInstructions .= $document->getContent().PHP_EOL.PHP_EOL;
+            $newInstructions .= "Source Type: ".$document->getSourceType().\PHP_EOL.
+                "Source Name: ".$document->getSourceName().\PHP_EOL.
+                "Content: ".$document->getContent().\PHP_EOL.\PHP_EOL;
         }
         $newInstructions .= '</EXTRA-CONTEXT>';
 
@@ -117,7 +140,9 @@ class RAG extends Agent
      */
     public function retrieveDocuments(Message $question): array
     {
-        $this->notify('rag-vectorstore-searching', new VectorStoreSearching($question));
+        $question = $this->applyPreProcessors($question);
+
+        $this->notify('rag-retrieving', new Retrieving($question));
 
         $documents = $this->resolveVectorStore()->similaritySearch(
             $this->resolveEmbeddingsProvider()->embedText($question->getContent()),
@@ -132,15 +157,30 @@ class RAG extends Agent
 
         $retrievedDocs = \array_values($retrievedDocs);
 
-        $this->notify('rag-vectorstore-result', new VectorStoreResult($question, $retrievedDocs));
+        $this->notify('rag-retrieved', new Retrieved($question, $retrievedDocs));
 
         return $this->applyPostProcessors($question, $retrievedDocs);
     }
 
     /**
+     * Apply a series of preprocessors to the asked question.
+     *
+     * @return Message The processed question.
+     */
+    protected function applyPreProcessors(Message $question): Message
+    {
+        foreach ($this->preProcessors() as $processor) {
+            $this->notify('rag-preprocessing', new PreProcessing($processor::class, $question));
+            $question = $processor->process($question);
+            $this->notify('rag-preprocessed', new PreProcessed($processor::class, $question));
+        }
+
+        return $question;
+    }
+
+    /**
      * Apply a series of postprocessors to the retrieved documents.
      *
-     * @param Message $question The question to process the documents for.
      * @param Document[] $documents The documents to process.
      * @return Document[] The processed documents.
      */
@@ -159,13 +199,54 @@ class RAG extends Agent
      * Feed the vector store with documents.
      *
      * @param Document[] $documents
-     * @return void
      */
-    public function addDocuments(array $documents): void
+    public function addDocuments(array $documents, int $chunkSize = 50): void
     {
-        $this->resolveVectorStore()->addDocuments(
-            $this->resolveEmbeddingsProvider()->embedDocuments($documents)
-        );
+        foreach (\array_chunk($documents, $chunkSize) as $chunk) {
+            $this->resolveVectorStore()->addDocuments(
+                $this->resolveEmbeddingsProvider()->embedDocuments($chunk)
+            );
+        }
+    }
+
+    /**
+     * @param Document[] $documents
+     */
+    public function reindexBySource(array $documents, int $chunkSize = 50): void
+    {
+        $grouped = [];
+
+        foreach ($documents as $document) {
+            $key = $document->sourceType . ':' . $document->sourceName;
+
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = [];
+            }
+
+            $grouped[$key][] = $document;
+        }
+
+        foreach (\array_keys($grouped) as $key) {
+            [$sourceType, $sourceName] = \explode(':', $key);
+            $this->resolveVectorStore()->deleteBySource($sourceType, $sourceName);
+            $this->addDocuments($grouped[$key], $chunkSize);
+        }
+    }
+
+    /**
+     * @throws AgentException
+     */
+    public function setPreProcessors(array $preProcessors): RAG
+    {
+        foreach ($preProcessors as $processor) {
+            if (! $processor instanceof PreProcessorInterface) {
+                throw new AgentException($processor::class." must implement ".PreProcessorInterface::class);
+            }
+
+            $this->preProcessors[] = $processor;
+        }
+
+        return $this;
     }
 
     /**
@@ -175,13 +256,21 @@ class RAG extends Agent
     {
         foreach ($postProcessors as $processor) {
             if (! $processor instanceof PostProcessorInterface) {
-                throw new AgentException($processor::class." must implement PostProcessorInterface");
+                throw new AgentException($processor::class." must implement ".PostProcessorInterface::class);
             }
 
             $this->postProcessors[] = $processor;
         }
 
         return $this;
+    }
+
+    /**
+     * @return PreProcessorInterface[]
+     */
+    protected function preProcessors(): array
+    {
+        return $this->preProcessors;
     }
 
     /**

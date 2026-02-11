@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\OpenAI;
 
 use GuzzleHttp\Promise\PromiseInterface;
@@ -34,7 +36,7 @@ trait HandleChat
             $json['tools'] = $this->generateToolsPayload();
         }
 
-        return $this->client->postAsync('chat/completions', compact('json'))
+        return $this->client->postAsync('chat/completions', ['json' => $json])
             ->then(function (ResponseInterface $response) {
                 $result = \json_decode($response->getBody()->getContents(), true);
 

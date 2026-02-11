@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\PostProcessor;
 
 use NeuronAI\Chat\Messages\Message;
@@ -22,6 +24,6 @@ class FixedThresholdPostProcessor implements PostProcessorInterface
 
     public function process(Message $question, array $documents): array
     {
-        return \array_values(\array_filter($documents, fn (Document $document) => $document->getScore() >= $this->threshold));
+        return \array_values(\array_filter($documents, fn (Document $document): bool => $document->getScore() >= $this->threshold));
     }
 }

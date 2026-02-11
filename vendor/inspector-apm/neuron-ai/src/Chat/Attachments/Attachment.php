@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Chat\Attachments;
 
 use NeuronAI\Chat\Enums\AttachmentContentType;
@@ -19,6 +21,9 @@ class Attachment implements \JsonSerializable
         //
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function jsonSerialize(): array
     {
         return \array_filter([

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI;
 
 use NeuronAI\Providers\AIProviderInterface;
@@ -8,8 +10,6 @@ trait ResolveProvider
 {
     /**
      * The AI provider instance.
-     *
-     * @var AIProviderInterface
      */
     protected AIProviderInterface $provider;
 
@@ -35,8 +35,6 @@ trait ResolveProvider
 
     /**
      * Get the current instance of the chat history.
-     *
-     * @return AIProviderInterface
      */
     public function resolveProvider(): AIProviderInterface
     {

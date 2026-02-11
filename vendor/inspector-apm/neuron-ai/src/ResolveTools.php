@@ -1,8 +1,15 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI;
 
+use NeuronAI\Chat\Messages\ToolCallMessage;
+use NeuronAI\Chat\Messages\ToolCallResultMessage;
 use NeuronAI\Exceptions\AgentException;
+use NeuronAI\Observability\Events\AgentError;
+use NeuronAI\Observability\Events\ToolCalled;
+use NeuronAI\Observability\Events\ToolCalling;
 use NeuronAI\Observability\Events\ToolsBootstrapped;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\Toolkits\ToolkitInterface;
@@ -12,16 +19,19 @@ trait ResolveTools
     /**
      * Registered tools.
      *
-     * @var ToolInterface[]
+     * @var ToolInterface[]|ToolkitInterface[]
      */
     protected array $tools = [];
 
+    /**
+     * @var ToolInterface[]
+     */
     protected array $toolsBootstrapCache = [];
 
     /**
      * Get the list of tools.
      *
-     * @return ToolInterface[]
+     * @return ToolInterface[]|ToolkitInterface[]
      */
     protected function tools(): array
     {
@@ -54,9 +64,10 @@ trait ResolveTools
 
         foreach ($this->getTools() as $tool) {
             if ($tool instanceof ToolkitInterface) {
-                if ($kitGuidelines = $tool->guidelines()) {
+                $kitGuidelines = $tool->guidelines();
+                if ($kitGuidelines !== null && $kitGuidelines !== '') {
                     $name = (new \ReflectionClass($tool))->getShortName();
-                    $kitGuidelines = '# '.$name.PHP_EOL.$kitGuidelines;
+                    $kitGuidelines = '# '.$name.\PHP_EOL.$kitGuidelines;
                 }
 
                 // Merge the tools
@@ -64,11 +75,11 @@ trait ResolveTools
                 $this->toolsBootstrapCache = \array_merge($this->toolsBootstrapCache, $innerTools);
 
                 // Add guidelines to the system prompt
-                if ($kitGuidelines) {
-                    $kitGuidelines .= PHP_EOL.implode(
-                        PHP_EOL.'- ',
+                if ($kitGuidelines !== null && $kitGuidelines !== '' && $kitGuidelines !== '0') {
+                    $kitGuidelines .= \PHP_EOL.\implode(
+                        \PHP_EOL.'- ',
                         \array_map(
-                            fn ($tool) => "{$tool->getName()}: {$tool->getDescription()}",
+                            fn (ToolInterface $tool): string => "{$tool->getName()}: {$tool->getDescription()}",
                             $innerTools
                         )
                     );
@@ -81,14 +92,14 @@ trait ResolveTools
             }
         }
 
-        if (!empty($guidelines)) {
-            $instructions = $this->removeDelimitedContent($this->instructions(), '<TOOLS-GUIDELINES>', '</TOOLS-GUIDELINES>');
+        $instructions = $this->removeDelimitedContent($this->resolveInstructions(), '<TOOLS-GUIDELINES>', '</TOOLS-GUIDELINES>');
+        if ($guidelines !== []) {
             $this->withInstructions(
-                $instructions.PHP_EOL.'<TOOLS-GUIDELINES>'.PHP_EOL.implode(PHP_EOL.PHP_EOL, $guidelines).PHP_EOL.'</TOOLS-GUIDELINES>'
+                $instructions.\PHP_EOL.'<TOOLS-GUIDELINES>'.\PHP_EOL.\implode(\PHP_EOL.\PHP_EOL, $guidelines).\PHP_EOL.'</TOOLS-GUIDELINES>'
             );
         }
 
-        $this->notify('tools-bootstrapped', new ToolsBootstrapped($this->toolsBootstrapCache));
+        $this->notify('tools-bootstrapped', new ToolsBootstrapped($this->toolsBootstrapCache, $guidelines));
 
         return $this->toolsBootstrapCache;
     }
@@ -96,8 +107,6 @@ trait ResolveTools
     /**
      * Add tools.
      *
-     * @param ToolInterface|ToolkitInterface|array $tools
-     * @return AgentInterface
      * @throws AgentException
      */
     public function addTool(ToolInterface|ToolkitInterface|array $tools): AgentInterface
@@ -115,5 +124,23 @@ trait ResolveTools
         $this->toolsBootstrapCache = [];
 
         return $this;
+    }
+
+    protected function executeTools(ToolCallMessage $toolCallMessage): ToolCallResultMessage
+    {
+        $toolCallResult = new ToolCallResultMessage($toolCallMessage->getTools());
+
+        foreach ($toolCallResult->getTools() as $tool) {
+            $this->notify('tool-calling', new ToolCalling($tool));
+            try {
+                $tool->execute();
+            } catch (\Throwable $exception) {
+                $this->notify('error', new AgentError($exception));
+                throw $exception;
+            }
+            $this->notify('tool-called', new ToolCalled($tool));
+        }
+
+        return $toolCallResult;
     }
 }

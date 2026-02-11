@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\VectorStore;
 
 use Http\Client\Exception;
@@ -26,7 +28,7 @@ class TypesenseVectorStore implements VectorStoreInterface
     {
         try {
             $this->client->collections[$this->collection]->retrieve();
-            $this->checkVectorDimension(count($document->getEmbedding()));
+            $this->checkVectorDimension(\count($document->getEmbedding()));
             return;
         } catch (ObjectNotFound) {
             $fields = [
@@ -67,34 +69,47 @@ class TypesenseVectorStore implements VectorStoreInterface
         }
     }
 
-    public function addDocument(Document $document): void
+    public function addDocument(Document $document): VectorStoreInterface
     {
-        if (empty($document->getEmbedding())) {
+        if ($document->getEmbedding() === []) {
             throw new \Exception('document embedding must be set before adding a document');
         }
 
         $this->checkIndexStatus($document);
 
         $this->client->collections[$this->collection]->documents->create([
-            'id' => $document->getId(), // Unique ID is required
+            'id' => (string) $document->getId(), // Unique ID is required
             'content' => $document->getContent(),
             'embedding' => $document->getEmbedding(),
             'sourceType' => $document->getSourceType(),
             'sourceName' => $document->getSourceName(),
             ...$document->metadata,
         ]);
+
+        return $this;
+    }
+
+    public function deleteBySource(string $sourceType, string $sourceName): VectorStoreInterface
+    {
+        $this->client->collections[$this->collection]->documents->delete([
+            "filter_by" => "sourceType:={$sourceType} && sourceName:={$sourceName}",
+        ]);
+
+        return $this;
     }
 
     /**
+     * Bulk save.
+     *
      * @param Document[] $documents
      * @throws Exception
      * @throws \JsonException
      * @throws TypesenseClientError
      */
-    public function addDocuments(array $documents): void
+    public function addDocuments(array $documents): VectorStoreInterface
     {
         if ($documents === []) {
-            return;
+            return $this;
         }
 
         if (empty($documents[0]->getEmbedding())) {
@@ -105,8 +120,8 @@ class TypesenseVectorStore implements VectorStoreInterface
 
         $lines = [];
         foreach ($documents as $document) {
-            $lines[] = json_encode([
-                'id' => $document->getId(), // Unique ID is required
+            $lines[] = \json_encode([
+                'id' => (string) $document->getId(), // Unique ID is required
                 'embedding' => $document->getEmbedding(),
                 'content' => $document->getContent(),
                 'sourceType' => $document->getSourceType(),
@@ -115,9 +130,11 @@ class TypesenseVectorStore implements VectorStoreInterface
             ]);
         }
 
-        $ndjson = implode("\n", $lines);
+        $ndjson = \implode("\n", $lines);
 
         $this->client->collections[$this->collection]->documents->import($ndjson);
+
+        return $this;
     }
 
     public function similaritySearch(array $embedding): array
@@ -125,22 +142,22 @@ class TypesenseVectorStore implements VectorStoreInterface
         $params = [
             'collection' => $this->collection,
             'q' => '*',
-            'vector_query' => 'embedding:(' . json_encode($embedding) . ')',
+            'vector_query' => 'embedding:(' . \json_encode($embedding) . ')',
             'exclude_fields' => 'embedding',
             'per_page' => $this->topK,
-            'num_candidates' => \max(50, intval($this->topK) * 4),
+            'num_candidates' => \max(50, \intval($this->topK) * 4),
         ];
 
         $searchRequests = ['searches' => [$params]];
 
         $response = $this->client->multiSearch->perform($searchRequests);
-        return \array_map(function (array $hit) {
+        return \array_map(function (array $hit): Document {
             $item = $hit['document'];
             $document = new Document($item['content']);
             //$document->embedding = $item['embedding']; // avoid carrying large data
             $document->sourceType = $item['sourceType'];
             $document->sourceName = $item['sourceName'];
-            $document->score = 1 - $hit['vector_distance'];
+            $document->score = VectorSimilarity::similarityFromDistance($hit['vector_distance']);
 
             foreach ($item as $name => $value) {
                 if (!\in_array($name, ['content', 'sourceType', 'sourceName', 'score', 'embedding', 'id', 'vector_distance'])) {

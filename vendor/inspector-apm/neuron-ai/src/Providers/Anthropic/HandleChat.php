@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Anthropic;
 
 use GuzzleHttp\Promise\PromiseInterface;
@@ -33,7 +35,7 @@ trait HandleChat
         }
 
 
-        return $this->client->postAsync('messages', compact('json'))
+        return $this->client->postAsync('messages', ['json' => $json])
             ->then(function (ResponseInterface $response) {
                 $result = \json_decode($response->getBody()->getContents(), true);
 

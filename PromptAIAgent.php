@@ -7,13 +7,14 @@ use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\Anthropic\Anthropic;
 use NeuronAI\Providers\OpenAI\OpenAI;
 use NeuronAI\Providers\Gemini\Gemini;
-use NeuronAI\Providers\Deepseek;
+use NeuronAI\Providers\Deepseek\Deepseek;
 
 class PromptAIAgent extends Agent {
     private ?string $apiKey;
     private ?string $providerName;
     private ?string $modelName;
     private ?string $systemPrompt;
+    private bool $enableTools;
 
     public function __construct(array $options = []) {
         if (!isset($options['apiKey']) || !isset($options['provider']) || !isset($options['model'])) {
@@ -23,6 +24,7 @@ class PromptAIAgent extends Agent {
         $this->providerName = $options['provider'];
         $this->modelName = $options['model'];
         $this->systemPrompt = $options['systemPrompt'];
+        $this->enableTools = (bool)($options['enableTools'] ?? false);
         $this->provider = $this->provider();
     }
 
@@ -53,5 +55,25 @@ class PromptAIAgent extends Agent {
 
     public function instructions(): string {
         return $this->systemPrompt ?: '';
+    }
+
+    protected function tools(): array {
+        if (!$this->enableTools) {
+            return [];
+        }
+
+        $toolsDir = __DIR__ . '/tools/';
+        if (!is_dir($toolsDir)) {
+            return [];
+        }
+
+        // Require all tool files
+        foreach (glob($toolsDir . '*.php') as $file) {
+            require_once $file;
+        }
+
+        return [
+            ProcessWireToolkit::make(),
+        ];
     }
 }

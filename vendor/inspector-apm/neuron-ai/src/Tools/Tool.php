@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools;
 
 use NeuronAI\Exceptions\MissingCallbackParameter;
@@ -16,16 +18,6 @@ class Tool implements ToolInterface
     use StaticConstructor;
 
     /**
-     * The unique name of the tool (like a function name: only letter and _).
-     */
-    protected string $name;
-
-    /**
-     * The description of the tool.
-     */
-    protected string $description;
-
-    /**
      * @var ToolPropertyInterface[]
      */
     protected array $properties = [];
@@ -33,7 +25,7 @@ class Tool implements ToolInterface
     /**
      * @var ?callable
      */
-    protected $callback = null;
+    protected $callback;
 
     /**
      * The arguments to pass in to the callback.
@@ -56,19 +48,11 @@ class Tool implements ToolInterface
      * @param ToolPropertyInterface[] $properties
      */
     public function __construct(
-        ?string $name = null,
-        ?string $description = null,
+        protected string $name,
+        protected ?string $description = null,
         array $properties = []
     ) {
-        if (!empty($name)) {
-            $this->name = $name;
-        }
-
-        if (!empty($description)) {
-            $this->description = $description;
-        }
-
-        if (!empty($properties)) {
+        if ($properties !== []) {
             $this->properties = $properties;
         }
     }
@@ -78,7 +62,7 @@ class Tool implements ToolInterface
         return $this->name;
     }
 
-    public function getDescription(): string
+    public function getDescription(): ?string
     {
         return $this->description;
     }
@@ -98,11 +82,11 @@ class Tool implements ToolInterface
     }
 
     /**
-     * @return array<ToolPropertyInterface>
+     * @return ToolPropertyInterface[]
      */
     public function getProperties(): array
     {
-        if (empty($this->properties)) {
+        if ($this->properties === []) {
             foreach ($this->properties() as $property) {
                 $this->addProperty($property);
             }
@@ -113,7 +97,7 @@ class Tool implements ToolInterface
 
     public function getRequiredProperties(): array
     {
-        return \array_reduce($this->getProperties(), function ($carry, ToolPropertyInterface $property) {
+        return \array_reduce($this->getProperties(), function (array $carry, ToolPropertyInterface $property): array {
             if ($property->isRequired()) {
                 $carry[] = $property->getName();
             }
@@ -155,9 +139,10 @@ class Tool implements ToolInterface
         return $this->result;
     }
 
-    public function setResult(string|array $result): self
+    public function setResult(mixed $result): self
     {
-        $this->result = is_array($result) ? \json_encode($result) : $result;
+        $this->result = \is_array($result) ? \json_encode($result) : (string) $result;
+
         return $this;
     }
 
@@ -171,8 +156,7 @@ class Tool implements ToolInterface
      */
     public function execute(): void
     {
-
-        if (!is_callable($this->callback) && !method_exists($this, '__invoke')) {
+        if (!\is_callable($this->callback) && !\method_exists($this, '__invoke')) {
             throw new ToolCallableNotSet('No function defined for tool execution.');
         }
 
@@ -183,13 +167,13 @@ class Tool implements ToolInterface
             }
         }
 
-        $parameters = array_reduce($this->getProperties(), function ($carry, $property) {
+        $parameters = \array_reduce($this->getProperties(), function (array $carry, ToolPropertyInterface $property): array {
             $propertyName = $property->getName();
             $inputs = $this->getInputs();
 
             // Normalize missing optional properties by assigning them a null value
-            // Treat it as explicitly null to ensure consistent structure
-            if (!array_key_exists($propertyName, $inputs)) {
+            // Treat it as explicitly null to ensure a consistent structure
+            if (!\array_key_exists($propertyName, $inputs)) {
                 $carry[$propertyName] = null;
                 return $carry;
             }
@@ -200,7 +184,7 @@ class Tool implements ToolInterface
             // If there is an object property with a class definition,
             // deserialize the tool input into an instance of that class
             if ($property instanceof ObjectProperty && $property->getClass()) {
-                $carry[$propertyName] = Deserializer::fromJson(json_encode($inputValue), $property->getClass());
+                $carry[$propertyName] = Deserializer::fromJson(\json_encode($inputValue), $property->getClass());
                 return $carry;
             }
 
@@ -210,9 +194,7 @@ class Tool implements ToolInterface
                 $items = $property->getItems();
                 if ($items instanceof ObjectProperty && $items->getClass()) {
                     $class = $items->getClass();
-                    $carry[$propertyName] = array_map(function ($input) use ($class) {
-                        return Deserializer::fromJson(json_encode($input), $class);
-                    }, $inputValue);
+                    $carry[$propertyName] = \array_map(fn (array|object $input): object => Deserializer::fromJson(\json_encode($input), $class), $inputValue);
                     return $carry;
                 }
             }
@@ -224,7 +206,7 @@ class Tool implements ToolInterface
         }, []);
 
         $this->setResult(
-            method_exists($this, '__invoke') ? $this->__invoke(...$parameters)
+            \method_exists($this, '__invoke') ? $this->__invoke(...$parameters)
                 : \call_user_func($this->callback, ...$parameters)
         );
     }
@@ -232,10 +214,10 @@ class Tool implements ToolInterface
     public function jsonSerialize(): array
     {
         return [
+            'callId' => $this->callId,
             'name' => $this->name,
             'description' => $this->description,
-            'inputs' => !empty($this->inputs) ? $this->inputs : new \stdClass(),
-            'callId' => $this->callId,
+            'inputs' => $this->inputs === [] ? new \stdClass() : $this->inputs,
             'result' => $this->result,
         ];
     }

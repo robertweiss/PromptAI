@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Workflow\Exporter;
 
 use NeuronAI\Workflow\Workflow;
@@ -23,7 +25,13 @@ class MermaidExporter implements ExporterInterface
 
     private function getShortClassName(string $class): string
     {
-        $reflection = new ReflectionClass($class);
-        return $reflection->getShortName();
+        // Check if it's a class name (contains namespace separator) and class exists
+        if (str_contains($class, '\\') && \class_exists($class)) {
+            $reflection = new ReflectionClass($class);
+            return $reflection->getShortName();
+        }
+
+        // Otherwise, it's a custom string key, use it directly
+        return $class;
     }
 }

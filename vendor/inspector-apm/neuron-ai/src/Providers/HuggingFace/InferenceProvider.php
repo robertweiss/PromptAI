@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\HuggingFace;
 
 enum InferenceProvider: string

@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Calculator;
 
 use NeuronAI\Tools\PropertyType;
@@ -36,6 +38,6 @@ DESC
 
     public function __invoke(float|int $number): float|int
     {
-        return sqrt($number);
+        return \sqrt($number);
     }
 }

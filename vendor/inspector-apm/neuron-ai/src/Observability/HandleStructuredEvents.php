@@ -1,25 +1,52 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Observability;
 
+use NeuronAI\AgentInterface;
 use NeuronAI\Observability\Events\Deserialized;
 use NeuronAI\Observability\Events\Deserializing;
 use NeuronAI\Observability\Events\Extracted;
 use NeuronAI\Observability\Events\Extracting;
+use NeuronAI\Observability\Events\SchemaGenerated;
+use NeuronAI\Observability\Events\SchemaGeneration;
 use NeuronAI\Observability\Events\Validated;
 use NeuronAI\Observability\Events\Validating;
 
 trait HandleStructuredEvents
 {
-    protected function extracting(\NeuronAI\AgentInterface $agent, string $event, Extracting $data)
+    protected function schemaGeneration(AgentInterface $agent, string $event, SchemaGeneration $data): void
     {
-        $id = $this->getMessageId($data->message).'-extract';
+        if (!$this->inspector->canAddSegments()) {
+            return;
+        }
 
-        $this->segments[$id] = $this->inspector->startSegment('structured-extract')
+        $this->segments[$data->class.'-schema'] = $this->inspector->startSegment(self::SEGMENT_TYPE.'.schema', "schema_generate( {$data->class} )")
             ->setColor(self::SEGMENT_COLOR);
     }
 
-    protected function extracted(\NeuronAI\AgentInterface $agent, string $event, Extracted $data)
+    protected function schemaGenerated(AgentInterface $agent, string $event, SchemaGenerated $data): void
+    {
+        if (\array_key_exists($data->class.'-schema', $this->segments)) {
+            $segment = $this->segments[$data->class.'-schema']->end();
+            $segment->addContext('Schema', $data->schema);
+        }
+    }
+
+    protected function extracting(AgentInterface $agent, string $event, Extracting $data): void
+    {
+        if (!$this->inspector->canAddSegments()) {
+            return;
+        }
+
+        $id = $this->getMessageId($data->message).'-extract';
+
+        $this->segments[$id] = $this->inspector->startSegment(self::SEGMENT_TYPE.'.output-extract', 'extract_output')
+            ->setColor(self::SEGMENT_COLOR);
+    }
+
+    protected function extracted(AgentInterface $agent, string $event, Extracted $data): void
     {
         $id = $this->getMessageId($data->message).'-extract';
 
@@ -39,13 +66,17 @@ trait HandleStructuredEvents
         }
     }
 
-    protected function deserializing(\NeuronAI\AgentInterface $agent, string $event, Deserializing $data)
+    protected function deserializing(AgentInterface $agent, string $event, Deserializing $data): void
     {
-        $this->segments[$data->class.'-deserialize'] = $this->inspector->startSegment('structured-deserialize', "deserialize( {$data->class} )")
+        if (!$this->inspector->canAddSegments()) {
+            return;
+        }
+
+        $this->segments[$data->class.'-deserialize'] = $this->inspector->startSegment(self::SEGMENT_TYPE.'.output-deserialize', "deserialize( {$data->class} )")
             ->setColor(self::SEGMENT_COLOR);
     }
 
-    protected function deserialized(\NeuronAI\AgentInterface $agent, string $event, Deserialized $data)
+    protected function deserialized(AgentInterface $agent, string $event, Deserialized $data): void
     {
         $id = $data->class.'-deserialize';
 
@@ -54,20 +85,24 @@ trait HandleStructuredEvents
         }
     }
 
-    protected function validating(\NeuronAI\AgentInterface $agent, string $event, Validating $data)
+    protected function validating(AgentInterface $agent, string $event, Validating $data): void
     {
-        $this->segments[$data->class.'-validate'] = $this->inspector->startSegment('structured-validate', "validate( {$data->class} )")
-        ->setColor(self::SEGMENT_COLOR)->setColor(self::SEGMENT_COLOR);
+        if (!$this->inspector->canAddSegments()) {
+            return;
+        }
+
+        $this->segments[$data->class.'-validate'] = $this->inspector->startSegment(self::SEGMENT_TYPE.'.output-validate', "validate( {$data->class} )")
+            ->setColor(self::SEGMENT_COLOR);
     }
 
-    protected function validated(\NeuronAI\AgentInterface $agent, string $event, Validated $data)
+    protected function validated(AgentInterface $agent, string $event, Validated $data): void
     {
         $id = $data->class.'-validate';
 
         if (\array_key_exists($id, $this->segments)) {
             $segment = $this->segments[$id]->end();
             $segment->addContext('Json', \json_decode($data->json));
-            if (!empty($data->violations)) {
+            if ($data->violations !== []) {
                 $segment->addContext('Violations', $data->violations);
             }
         }

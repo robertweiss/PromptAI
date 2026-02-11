@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Calculator;
 
 use NeuronAI\Tools\ArrayProperty;
@@ -42,23 +44,21 @@ DESC
     public function __invoke(array $numbers): float|array
     {
         // Validate input
-        if (empty($numbers)) {
+        if ($numbers === []) {
             return ['error' => 'Data array cannot be empty'];
         }
 
         // Filter and validate numeric values
-        $numericData = array_filter($numbers, function ($value) {
-            return is_numeric($value);
-        });
+        $numericData = \array_filter($numbers, fn (string|float|int $value): bool => \is_numeric($value));
 
-        if (empty($numericData)) {
+        if ($numericData === []) {
             return ['error' => 'Data array must contain at least one numeric value'];
         }
 
         // Convert to float values
-        $numericData = array_map('floatval', $numericData);
-        $mean = array_sum($numericData) / count($numericData);
+        $numericData = \array_map('floatval', $numericData);
+        $mean = \array_sum($numericData) / \count($numericData);
 
-        return round($mean, $this->precision);
+        return \round($mean, $this->precision);
     }
 }

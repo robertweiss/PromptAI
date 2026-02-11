@@ -16,16 +16,6 @@ trait Observable
 
     private function initEventGroup(string $event = '*'): void
     {
-        /*if (!empty($_ENV['INSPECTOR_INGESTION_KEY'])) {
-            if (!isset($this->observers['*'])) {
-                $this->observers['*'] = [
-                    AgentMonitoring::instance(),
-                ];
-            } else {
-                $this->observers['*'][] = AgentMonitoring::instance();
-            }
-        }*/
-
         /*
          * If developers attach an observer, the agent monitoring will not be attached by default.
          */
@@ -40,6 +30,9 @@ trait Observable
         }
     }
 
+    /**
+     * @return array<SplObserver>
+     */
     private function getEventObservers(string $event = "*"): array
     {
         $this->initEventGroup($event);
@@ -70,7 +63,7 @@ trait Observable
         }
     }
 
-    public function notify(string $event = "*", $data = null): void
+    public function notify(string $event = "*", mixed $data = null): void
     {
         // Broadcasting the '$event' event";
         foreach ($this->getEventObservers($event) as $observer) {

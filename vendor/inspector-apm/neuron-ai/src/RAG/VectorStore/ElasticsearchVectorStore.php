@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\VectorStore;
 
 use Elastic\Elasticsearch\Exception\ClientResponseException;
@@ -46,7 +48,7 @@ class ElasticsearchVectorStore implements VectorStoreInterface
         ];
 
         // Map metadata
-        foreach ($document->metadata as $name => $value) {
+        foreach (\array_keys($document->metadata) as $name) {
             $properties[$name] = [
                 'type' => 'keyword',
             ];
@@ -65,9 +67,9 @@ class ElasticsearchVectorStore implements VectorStoreInterface
     /**
      * @throws \Exception
      */
-    public function addDocument(Document $document): void
+    public function addDocument(Document $document): VectorStoreInterface
     {
-        if (empty($document->embedding)) {
+        if ($document->embedding === []) {
             throw new \Exception('Document embedding must be set before adding a document');
         }
 
@@ -85,6 +87,8 @@ class ElasticsearchVectorStore implements VectorStoreInterface
         ]);
 
         $this->client->indices()->refresh(['index' => $this->index]);
+
+        return $this;
     }
 
     /**
@@ -92,10 +96,10 @@ class ElasticsearchVectorStore implements VectorStoreInterface
      *
      * @throws \Exception
      */
-    public function addDocuments(array $documents): void
+    public function addDocuments(array $documents): VectorStoreInterface
     {
         if ($documents === []) {
-            return;
+            return $this;
         }
 
         if (empty($documents[0]->getEmbedding())) {
@@ -124,6 +128,18 @@ class ElasticsearchVectorStore implements VectorStoreInterface
         }
         $this->client->bulk($params);
         $this->client->indices()->refresh(['index' => $this->index]);
+        return $this;
+    }
+
+    public function deleteBySource(string $sourceType, string $sourceName): VectorStoreInterface
+    {
+        $this->client->deleteByQuery([
+            'index' => $this->index,
+            'q' => "sourceType:{$sourceType} AND sourceName:{$sourceName}",
+            'body' => []
+        ]);
+        $this->client->indices()->refresh(['index' => $this->index]);
+        return $this;
     }
 
     /**
@@ -154,13 +170,13 @@ class ElasticsearchVectorStore implements VectorStoreInterface
         ];
 
         // Hybrid search
-        if (!empty($this->filters)) {
+        if ($this->filters !== []) {
             $searchParams['body']['knn']['filter'] = $this->filters;
         }
 
         $response = $this->client->search($searchParams);
 
-        return \array_map(function (array $item) {
+        return \array_map(function (array $item): Document {
             $document = new Document($item['_source']['content']);
             //$document->embedding = $item['_source']['embedding']; // avoid carrying large data
             $document->sourceType = $item['_source']['sourceType'];

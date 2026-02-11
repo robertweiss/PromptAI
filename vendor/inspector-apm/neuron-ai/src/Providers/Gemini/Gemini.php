@@ -1,14 +1,18 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Gemini;
 
 use GuzzleHttp\Client;
 use NeuronAI\Chat\Enums\MessageRole;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\ToolCallMessage;
+use NeuronAI\Exceptions\ProviderException;
 use NeuronAI\Providers\HasGuzzleClient;
 use NeuronAI\Providers\AIProviderInterface;
 use NeuronAI\Providers\HandleWithTools;
+use NeuronAI\Providers\HttpClientOptions;
 use NeuronAI\Providers\MessageMapperInterface;
 use NeuronAI\Tools\ToolInterface;
 use NeuronAI\Tools\ToolPropertyInterface;
@@ -23,39 +27,40 @@ class Gemini implements AIProviderInterface
 
     /**
      * The main URL of the provider API.
-     *
-     * @var string
      */
     protected string $baseUri = 'https://generativelanguage.googleapis.com/v1beta/models';
 
     /**
      * System instructions.
-     *
-     * @var ?string
      */
     protected ?string $system = null;
 
-    /**
-     * The component responsible for mapping the NeuronAI Message to the AI provider format.
-     *
-     * @var MessageMapperInterface
-     */
     protected MessageMapperInterface $messageMapper;
 
+    /**
+     * @param array<string, mixed> $parameters
+     */
     public function __construct(
         protected string $key,
         protected string $model,
         protected array $parameters = [],
+        protected ?HttpClientOptions $httpOptions = null,
     ) {
-        $this->client = new Client([
-            // Since Gemini use colon ":" into the URL guxxle fire an exception udsing base_uri configuration.
+        $config = [
+            // Since Gemini use colon ":" into the URL, guzzle fires an exception using base_uri configuration.
             //'base_uri' => trim($this->baseUri, '/').'/',
             'headers' => [
                 'Accept' => 'application/json',
                 'Content-Type' => 'application/json',
                 'x-goog-api-key' => $this->key,
             ]
-        ]);
+        ];
+
+        if ($this->httpOptions instanceof HttpClientOptions) {
+            $config = $this->mergeHttpOptions($config, $this->httpOptions);
+        }
+
+        $this->client = new Client($config);
     }
 
     public function systemPrompt(?string $prompt): AIProviderInterface
@@ -66,15 +71,15 @@ class Gemini implements AIProviderInterface
 
     public function messageMapper(): MessageMapperInterface
     {
-        if (!isset($this->messageMapper)) {
-            $this->messageMapper = new MessageMapper();
-        }
-        return $this->messageMapper;
+        return $this->messageMapper ?? $this->messageMapper = new MessageMapper();
     }
 
+    /**
+     * @return array<string, array<int, mixed>>
+     */
     protected function generateToolsPayload(): array
     {
-        $tools = \array_map(function (ToolInterface $tool) {
+        $tools = \array_map(function (ToolInterface $tool): array {
             $payload = [
                 'name' => $tool->getName(),
                 'description' => $tool->getDescription(),
@@ -85,7 +90,7 @@ class Gemini implements AIProviderInterface
                 ],
             ];
 
-            $properties = \array_reduce($tool->getProperties(), function (array $carry, ToolPropertyInterface $property) {
+            $properties = \array_reduce($tool->getProperties(), function (array $carry, ToolPropertyInterface $property): array {
                 $carry[$property->getName()] = $property->getJsonSchema();
                 return $carry;
             }, []);
@@ -106,9 +111,13 @@ class Gemini implements AIProviderInterface
         ];
     }
 
+    /**
+     * @param array<string, mixed> $message
+     * @throws ProviderException
+     */
     protected function createToolCallMessage(array $message): Message
     {
-        $tools = \array_map(function (array $item) {
+        $tools = \array_map(function (array $item): ?\NeuronAI\Tools\ToolInterface {
             if (!isset($item['functionCall'])) {
                 return null;
             }

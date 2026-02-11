@@ -1,8 +1,12 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\Embeddings;
 
 use GuzzleHttp\Client;
+use GuzzleHttp\RequestOptions;
+use NeuronAI\RAG\Document;
 
 class VoyageEmbeddingsProvider extends AbstractEmbeddingsProvider
 {
@@ -28,15 +32,38 @@ class VoyageEmbeddingsProvider extends AbstractEmbeddingsProvider
     public function embedText(string $text): array
     {
         $response = $this->client->post('', [
-            'json' => [
+            RequestOptions::JSON => [
                 'model' => $this->model,
                 'input' => $text,
                 'output_dimension' => $this->dimensions,
             ]
-        ]);
+        ])->getBody()->getContents();
 
-        $response = \json_decode($response->getBody()->getContents(), true);
+        $response = \json_decode($response, true);
 
         return $response['data'][0]['embedding'];
+    }
+
+    public function embedDocuments(array $documents): array
+    {
+        $chunks = \array_chunk($documents, 100);
+
+        foreach ($chunks as $chunk) {
+            $response = $this->client->post('', [
+                RequestOptions::JSON => [
+                    'model' => $this->model,
+                    'input' => \array_map(fn (Document $document): string => $document->getContent(), $chunk),
+                    'output_dimension' => $this->dimensions,
+                ]
+            ])->getBody()->getContents();
+
+            $response = \json_decode($response, true);
+
+            foreach ($response['data'] as $index => $item) {
+                $chunk[$index]->embedding = $item['embedding'];
+            }
+        }
+
+        return \array_merge(...$chunks);
     }
 }

@@ -1,8 +1,9 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Chat\History;
 
-use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Exceptions\ChatHistoryException;
 
 class FileChatHistory extends AbstractChatHistory
@@ -20,10 +21,10 @@ class FileChatHistory extends AbstractChatHistory
             throw new ChatHistoryException("Directory '{$this->directory}' does not exist");
         }
 
-        $this->init();
+        $this->load();
     }
 
-    protected function init(): void
+    protected function load(): void
     {
         if (\is_file($this->getFilePath())) {
             $messages = \json_decode(\file_get_contents($this->getFilePath()), true) ?? [];
@@ -33,16 +34,10 @@ class FileChatHistory extends AbstractChatHistory
 
     protected function getFilePath(): string
     {
-        return $this->directory . DIRECTORY_SEPARATOR . $this->prefix.$this->key.$this->ext;
+        return $this->directory . \DIRECTORY_SEPARATOR . $this->prefix.$this->key.$this->ext;
     }
 
-    protected function storeMessage(Message $message): ChatHistoryInterface
-    {
-        $this->updateFile();
-        return $this;
-    }
-
-    public function removeOldestMessage(): ChatHistoryInterface
+    public function setMessages(array $messages): ChatHistoryInterface
     {
         $this->updateFile();
         return $this;
@@ -58,6 +53,6 @@ class FileChatHistory extends AbstractChatHistory
 
     protected function updateFile(): void
     {
-        \file_put_contents($this->getFilePath(), \json_encode($this->jsonSerialize()), LOCK_EX);
+        \file_put_contents($this->getFilePath(), \json_encode($this->jsonSerialize()), \LOCK_EX);
     }
 }

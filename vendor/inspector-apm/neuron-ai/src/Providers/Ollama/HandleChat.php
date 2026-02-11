@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Providers\Ollama;
 
 use GuzzleHttp\Promise\PromiseInterface;
@@ -8,6 +10,7 @@ use NeuronAI\Chat\Messages\AssistantMessage;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Chat\Messages\Usage;
 use NeuronAI\Exceptions\ProviderException;
+use Psr\Http\Message\ResponseInterface;
 
 trait HandleChat
 {
@@ -34,13 +37,13 @@ trait HandleChat
             $json['tools'] = $this->generateToolsPayload();
         }
 
-        return $this->client->postAsync('chat', compact('json'))
-            ->then(function ($response) {
+        return $this->client->postAsync('chat', ['json' => $json])
+            ->then(function (ResponseInterface $response): Message {
                 if ($response->getStatusCode() < 200 || $response->getStatusCode() >= 300) {
                     throw new ProviderException("Ollama chat error: {$response->getBody()->getContents()}");
                 }
 
-                $response = json_decode($response->getBody()->getContents(), true);
+                $response = \json_decode($response->getBody()->getContents(), true);
                 $message = $response['message'];
 
                 if (\array_key_exists('tool_calls', $message)) {

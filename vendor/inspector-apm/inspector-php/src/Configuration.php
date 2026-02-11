@@ -1,6 +1,16 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Inspector;
+
+use InvalidArgumentException;
+
+use function filter_var;
+use function trim;
+use function in_array;
+
+use const FILTER_VALIDATE_URL;
 
 class Configuration
 {
@@ -20,7 +30,7 @@ class Configuration
 
     protected string $transport = 'async';
 
-    protected string $version = '3.15.8';
+    protected ?string $version = '3.16.12';
 
     /**
      * General-purpose options, E.g., we can set the transport proxy.
@@ -30,11 +40,11 @@ class Configuration
     /**
      * Configuration constructor.
      *
-     * @throws \InvalidArgumentException
+     * @throws InvalidArgumentException
      */
     public function __construct(?string $ingestionKey = null)
     {
-        if (!empty($ingestionKey)) {
+        if (!in_array($ingestionKey, [null, '', '0'], true)) {
             $this->setIngestionKey($ingestionKey);
         }
     }
@@ -50,18 +60,18 @@ class Configuration
     /**
      * Set the remote url.
      *
-     * @throws \InvalidArgumentException
+     * @throws InvalidArgumentException
      */
     public function setUrl(string $value): Configuration
     {
-        $value = \trim($value);
+        $value = trim($value);
 
-        if (empty($value)) {
-            throw new \InvalidArgumentException('URL can not be empty');
+        if ($value === '' || $value === '0') {
+            throw new InvalidArgumentException('URL can not be empty');
         }
 
         if (filter_var($value, FILTER_VALIDATE_URL) === false) {
-            throw new \InvalidArgumentException('URL is invalid');
+            throw new InvalidArgumentException('URL is invalid');
         }
 
         $this->url = $value;
@@ -77,18 +87,16 @@ class Configuration
     }
 
     /**
-     * Verify if api key is well formed.
+     * Verify if api key is well-formed.
      *
-     * @param string $value
-     * @return $this
-     * @throws \InvalidArgumentException
+     * @throws InvalidArgumentException
      */
     public function setIngestionKey(string $value): Configuration
     {
-        $value = \trim($value);
+        $value = trim($value);
 
-        if (empty($value)) {
-            throw new \InvalidArgumentException('Ingestion key cannot be empty');
+        if ($value === '' || $value === '0') {
+            throw new InvalidArgumentException('Ingestion key cannot be empty');
         }
 
         $this->ingestionKey = $value;
@@ -108,10 +116,6 @@ class Configuration
         return $this->maxItems;
     }
 
-    /**
-     * @param int $maxItems
-     * @return $this
-     */
     public function setMaxItems(int $maxItems): Configuration
     {
         $this->maxItems = $maxItems;
@@ -125,10 +129,6 @@ class Configuration
 
     /**
      * Add a key-value pair to the options list.
-     *
-     * @param string $key
-     * @param mixed $value
-     * @return $this
      */
     public function addOption(string $key, mixed $value): Configuration
     {
@@ -138,9 +138,6 @@ class Configuration
 
     /**
      * Override the entire options.
-     *
-     * @param array $options
-     * @return $this
      */
     public function setOptions(array $options): Configuration
     {
@@ -185,7 +182,7 @@ class Configuration
     /**
      * Get the package version.
      */
-    public function getVersion(): string
+    public function getVersion(): ?string
     {
         return $this->version;
     }
@@ -193,7 +190,7 @@ class Configuration
     /**
      * Set the package version.
      */
-    public function setVersion(string $value): Configuration
+    public function setVersion(?string $value): Configuration
     {
         $this->version = $value;
         return $this;

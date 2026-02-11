@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\RAG\VectorStore;
 
 use GuzzleHttp\Client;
@@ -14,32 +16,46 @@ class ChromaVectorStore implements VectorStoreInterface
         protected string $collection,
         protected string $host = 'http://localhost:8000',
         protected int $topK = 5,
+        protected string $version = 'v1',
     ) {
     }
 
     protected function getClient(): Client
     {
-        if (isset($this->client)) {
-            return $this->client;
-        }
-        return $this->client = new Client([
-            'base_uri' => trim($this->host, '/')."/api/v1/collections/{$this->collection}/",
+        return $this->client ?? $this->client = new Client([
+            'base_uri' => \trim($this->host, '/')."/api/{$this->version}/collections/{$this->collection}/",
             'headers' => [
                 'Content-Type' => 'application/json',
             ]
         ]);
     }
 
-    public function addDocument(Document $document): void
+    public function addDocument(Document $document): VectorStoreInterface
     {
-        $this->addDocuments([$document]);
+        return $this->addDocuments([$document]);
     }
 
-    public function addDocuments(array $documents): void
+    public function deleteBySource(string $sourceType, string $sourceName): VectorStoreInterface
+    {
+        $this->getClient()->post('delete', [
+            RequestOptions::JSON => [
+                'where' => [
+                    'sourceType' => $sourceType,
+                    'sourceName' => $sourceName,
+                ]
+            ]
+        ]);
+
+        return $this;
+    }
+
+    public function addDocuments(array $documents): VectorStoreInterface
     {
         $this->getClient()->post('upsert', [
             RequestOptions::JSON => $this->mapDocuments($documents),
-        ])->getBody()->getContents();
+        ]);
+
+        return $this;
     }
 
     public function similaritySearch(array $embedding): iterable
@@ -63,7 +79,7 @@ class ChromaVectorStore implements VectorStoreInterface
             $document->content = $response['documents'][$i];
             $document->sourceType = $response['metadatas'][$i]['sourceType'] ?? null;
             $document->sourceName = $response['metadatas'][$i]['sourceName'] ?? null;
-            $document->score = $response['distances'][$i];
+            $document->score = VectorSimilarity::similarityFromDistance($response['distances'][$i]);
 
             foreach ($response['metadatas'][$i] as $name => $value) {
                 if (!\in_array($name, ['content', 'sourceType', 'sourceName', 'score', 'embedding', 'id'])) {
@@ -79,7 +95,6 @@ class ChromaVectorStore implements VectorStoreInterface
 
     /**
      * @param Document[] $documents
-     * @return array
      */
     protected function mapDocuments(array $documents): array
     {
@@ -88,8 +103,8 @@ class ChromaVectorStore implements VectorStoreInterface
             'documents' => [],
             'embeddings' => [],
             'metadatas' => [],
-
         ];
+
         foreach ($documents as $document) {
             $payload['ids'][] = $document->getId();
             $payload['documents'][] = $document->getContent();

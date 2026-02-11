@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Zep;
 
 use GuzzleHttp\RequestOptions;
@@ -69,21 +71,17 @@ Use this tool if you need to retrieve user information that can help you provide
 
     protected function mapEdges(array $edges): array
     {
-        return \array_map(function (array $edge) {
-            return [
-                'fact' => $edge['fact'],
-                'created_at' => $edge['created_at'],
-            ];
-        }, $edges);
+        return \array_map(fn (array $edge): array => [
+            'fact' => $edge['fact'],
+            'created_at' => $edge['created_at'],
+        ], $edges);
     }
 
     protected function mapNodes(array $nodes): array
     {
-        return \array_map(function (array $node) {
-            return [
-                'name' => $node['name'],
-                'summary' => $node['summary'],
-            ];
-        }, $nodes);
+        return \array_map(fn (array $node): array => [
+            'name' => $node['name'],
+            'summary' => $node['summary'],
+        ], $nodes);
     }
 }

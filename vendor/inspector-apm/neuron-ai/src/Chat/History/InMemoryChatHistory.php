@@ -1,8 +1,8 @@
 <?php
 
-namespace NeuronAI\Chat\History;
+declare(strict_types=1);
 
-use NeuronAI\Chat\Messages\Message;
+namespace NeuronAI\Chat\History;
 
 class InMemoryChatHistory extends AbstractChatHistory
 {
@@ -11,12 +11,7 @@ class InMemoryChatHistory extends AbstractChatHistory
         parent::__construct($contextWindow);
     }
 
-    protected function storeMessage(Message $message): ChatHistoryInterface
-    {
-        return $this;
-    }
-
-    public function removeOldestMessage(): ChatHistoryInterface
+    public function setMessages(array $messages): ChatHistoryInterface
     {
         return $this;
     }

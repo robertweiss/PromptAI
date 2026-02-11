@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\Calculator;
 
 use NeuronAI\Tools\ArrayProperty;
@@ -42,25 +44,23 @@ DESC
     public function __invoke(array $numbers): float|array
     {
         // Validate input
-        if (empty($numbers)) {
+        if ($numbers === []) {
             return ['error' => 'Data array cannot be empty'];
         }
 
         // Filter and validate numeric values
-        $numericData = array_filter($numbers, function ($value) {
-            return is_numeric($value);
-        });
+        $numericData = \array_filter($numbers, fn (string|float|int $value): bool => \is_numeric($value));
 
-        if (empty($numericData)) {
+        if ($numericData === []) {
             return ['error' => 'Data array must contain at least one numeric value'];
         }
 
         // Convert to float values and sort
-        $numericData = array_map('floatval', $numericData);
-        sort($numericData);
+        $numericData = \array_map('floatval', $numericData);
+        \sort($numericData);
 
-        $count = count($numericData);
-        $middle = (int) floor($count / 2);
+        $count = \count($numericData);
+        $middle = (int) \floor($count / 2);
 
         if ($count % 2 === 0) {
             // Even number of elements - average of two middle values
@@ -70,6 +70,6 @@ DESC
             $median = $numericData[$middle];
         }
 
-        return round($median, $this->precision);
+        return \round($median, $this->precision);
     }
 }

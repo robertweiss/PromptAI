@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\StructuredOutput\Validation\Rules;
 
 use NeuronAI\StructuredOutput\Validation\Validator;
@@ -40,7 +42,7 @@ class ArrayOf extends AbstractValidationRule
     ) {
     }
 
-    public function validate(string $name, mixed $value, array &$violations)
+    public function validate(string $name, mixed $value, array &$violations): void
     {
         if ($this->allowEmpty && empty($value)) {
             return;
@@ -51,12 +53,12 @@ class ArrayOf extends AbstractValidationRule
             return;
         }
 
-        if (!is_array($value)) {
+        if (!\is_array($value)) {
             $violations[] = $this->buildMessage($name, $this->message);
             return;
         }
 
-        $type = strtolower($this->type);
+        $type = \strtolower($this->type);
 
         $error = false;
         foreach ($value as $item) {
@@ -64,11 +66,9 @@ class ArrayOf extends AbstractValidationRule
                 continue;
             }
 
-            if ($item instanceof $this->type) {
-                // It's like a recursive call.
-                if (empty(Validator::validate($item))) {
-                    continue;
-                }
+            // It's like a recursive call.
+            if ($item instanceof $this->type && Validator::validate($item) === []) {
+                continue;
             }
 
             $error = true;

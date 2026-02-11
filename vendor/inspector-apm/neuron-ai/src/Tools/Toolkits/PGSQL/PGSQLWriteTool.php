@@ -1,5 +1,7 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI\Tools\Toolkits\PGSQL;
 
 use NeuronAI\Tools\PropertyType;
@@ -32,7 +34,7 @@ class PGSQLWriteTool extends Tool
         ];
     }
 
-    public function __invoke(string $query)
+    public function __invoke(string $query): string
     {
         $result = $this->pdo->prepare($query)->execute();
 

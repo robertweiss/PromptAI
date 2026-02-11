@@ -1,7 +1,7 @@
 {
     "name": "inspector-apm/inspector-php",
-    "description": "Inspector for PHP applications.",
-    "keywords": ["monitoring", "php", "inspector"],
+    "description": "Inspector monitoring for PHP applications.",
+    "keywords": ["monitoring", "php", "inspector", "observability", "telemetry"],
     "license": "MIT",
     "authors": [
         {
@@ -19,17 +19,19 @@
     },
     "config": {
         "sort-packages": true,
-        "preferred-install": "dist"
+        "preferred-install": "dist",
+        "platform": {
+            "php": "8.1"
+        }
     },
-    "minimum-stability": "dev",
-    "prefer-stable": true,
+    "minimum-stability": "stable",
     "require-dev": {
         "ext-curl": "*",
         "friendsofphp/php-cs-fixer": "^3.75",
-        "inspector-apm/neuron-ai": "^1.2.22",
-        "phpunit/phpunit": "^9.0",
+        "neuron-core/neuron-ai": "^2.8",
         "phpstan/phpstan": "^2.1",
-        "rector/rector": "^2.0",
+        "phpunit/phpunit": "^9.0",
+        "rector/rector": "^2.2",
         "tomasvotruba/type-coverage": "^2.0"
     },
     "autoload-dev": {
@@ -39,13 +41,27 @@
     },
     "scripts": {
         "analyse": [
-            "vendor/bin/phpstan analyse --memory-limit=1G -v"
-        ],
-        "format": [
-            "php-cs-fixer fix"
+            "vendor/bin/phpstan analyse -v --ansi --memory-limit=2G"
         ],
         "test": [
             "vendor/bin/phpunit --colors=always"
+        ],
+        "refactor": [
+            "vendor/bin/rector",
+            "php-cs-fixer fix --allow-risky=yes"
+        ],
+        "format": [
+            "php-cs-fixer fix --allow-risky=yes"
+        ],
+        "style": [
+            "php-cs-fixer fix --allow-risky=yes",
+            "vendor/bin/rector"
         ]
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-develop": "3.16.x-dev",
+            "dev-master": "3.16.x-dev"
+        }
     }
 }

@@ -1,8 +1,10 @@
 <?php
 
+declare(strict_types=1);
+
 namespace NeuronAI;
 
-use NeuronAI\Chat\History\AbstractChatHistory;
+use NeuronAI\Chat\History\ChatHistoryInterface;
 use NeuronAI\Chat\History\InMemoryChatHistory;
 use NeuronAI\Chat\Messages\Message;
 use NeuronAI\Observability\Events\MessageSaved;
@@ -10,12 +12,12 @@ use NeuronAI\Observability\Events\MessageSaving;
 
 trait ResolveChatHistory
 {
-    protected AbstractChatHistory $chatHistory;
+    protected ChatHistoryInterface $chatHistory;
 
     /**
      * Called on the agent instance.
      */
-    public function withChatHistory(AbstractChatHistory $chatHistory): self
+    public function withChatHistory(ChatHistoryInterface $chatHistory): self
     {
         $this->chatHistory = $chatHistory;
         return $this;
@@ -24,7 +26,7 @@ trait ResolveChatHistory
     /**
      * Used extending the Agent.
      */
-    protected function chatHistory(): AbstractChatHistory
+    protected function chatHistory(): ChatHistoryInterface
     {
         return new InMemoryChatHistory();
     }
@@ -43,7 +45,7 @@ trait ResolveChatHistory
     /**
      * Get the current instance of the chat history.
      */
-    public function resolveChatHistory(): AbstractChatHistory
+    public function resolveChatHistory(): ChatHistoryInterface
     {
         if (!isset($this->chatHistory)) {
             $this->chatHistory = $this->chatHistory();

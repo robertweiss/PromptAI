@@ -1,174 +1,233 @@
 # PromptAI
 
-PromptAI is a ProcessWire CMS module that utilizes AI to process text, image, and file fields upon saving. The processed text can be saved back to the original field or a different one on the same page. The module supports regular page fields, repeater fields, and repeater matrix fields. For image and file fields, the AI can analyze content and write descriptions or populate custom subfields.
+PromptAI is a ProcessWire module that integrates AI providers into the page editor. It processes text, image, and file fields through AI — either inline (per-field buttons) or on page save. The module supports regular fields, repeater fields, and repeater matrix fields. For image and file fields, the AI can analyze content and write to any subfield (description, alt text, captions, etc.). Prompts can reference other field values using placeholder syntax for context-aware processing.
 
-## Field support
+## Features
 
-### Regular Fields
-- PageTitle(Language)
-- Text(Language)
-- Textarea(Language)
-- Pageimage(s), including custom fields
-- Pagefile(s) (PDF, RTF, Markdown, JSON, XML, CSV, TXT), including custom fields
+### Multi-Provider Support
+
+Choose from four AI providers:
+
+- **Anthropic** (Claude)
+- **OpenAI** (GPT)
+- **Google Gemini**
+- **DeepSeek** (text fields only — does not support image or file field processing)
+
+### Two Processing Modes
+
+- **Page Mode**: Add a "Save + Send to AI" button to the page editor. All configured prompts run on save.
+- **Inline Mode**: AI buttons appear directly next to individual fields. Process fields on-demand without saving the page.
+
+Both modes can be mixed freely in the same configuration.
+
+### Placeholder Support
+
+Reference field values from anywhere on the page using `{page.fieldname}` syntax. When processing repeater items, access the current item's fields with `{item.fieldname}`.
+
+```
+Prompt: "Summarize the following text to 400 characters: {page.body}"
+Field: summary
+→ Creates a concise summary of the body field content
+```
+
+```
+Prompt: "Create an SEO meta description for a page titled '{page.title}' about: {page.headline}"
+Field: seo_description
+→ Generates contextual SEO description using page title and headline
+```
+
+```
+Prompt: "Generate alt text for this image based on the page topic: {page.category}"
+Field: images (alt_text subfield)
+→ Creates relevant alt text considering the page's category
+```
+
+```
+Prompt: "Create gallery item description for '{item.caption}' from the {page.gallery_title} collection"
+Field: description (within repeater)
+→ Uses parent page gallery title and item caption for context-aware descriptions
+```
+
+### Custom Subfield Support
+
+For image and file fields, configure which subfield the AI writes to:
+
+- `description` (default)
+- `alt_text`
+- `caption`
+- Any custom subfield defined on your file/image fields
+
+The "Target Subfield" option appears in the prompt configuration when file or image fields are selected. In inline mode, AI buttons appear next to all text subfield inputs automatically. See the [ProcessWire documentation on custom subfields](https://processwire.com/blog/posts/pw-3.0.142/) for more information.
+
+### AI Tools
+
+When enabled, the AI can query your ProcessWire installation to answer questions about your content:
+
+- **getPages**: Find pages by selector (e.g., "template=blog-post, limit=10, sort=-created")
+- **getPage**: Get detailed information about a single page including all text field values
+- **getFields**: List available templates and their fields
+
+This lets you write prompts like *"List the 10 most recent blog posts as a bullet list with links"* and the AI will retrieve the data from your site.
+
+Tools enforce security constraints: selector sanitization, no `include=all`, only text fields exposed, admin pages excluded. Tools are disabled by default and must be explicitly enabled in module configuration.
+
+## Supported Fields
+
+### Text Fields
+- PageTitle / PageTitleLanguage
+- Text / TextLanguage
+- Textarea / TextareaLanguage
+
+### File & Image Fields
+- Pageimage(s) — any text subfield
+- Pagefile(s) — PDF, plain text, and other formats depending on the AI provider
 
 ### Repeater Support
-- **Repeater fields**: Process fields within repeater items
-- **Repeater Matrix fields**: Process fields within repeater matrix items
+- Repeater fields
+- Repeater Matrix fields
 - All supported field types work within repeaters
 - Each repeater item is processed individually
 
 ## Installation
 
-1. Download and install [PromptAI](https://github.com/robertweiss/PromptAI).
-2. Configure the module through the dedicated "Prompt AI" page in the admin.
-3. Open a page, click on the arrow next to the save-button, and select "Save + send to AI".
+1. Download and place in `/site/modules/PromptAI/`.
+2. Run `composer install` inside the module directory to install dependencies.
+3. Activate the module in the ProcessWire admin.
+4. Configure your API key and provider in Modules > Site > PromptAI.
+5. Set up your prompts at Setup > Prompt AI.
 
 ## Configuration
 
-PromptAI creates a dedicated configuration page accessible from **Setup > Prompt AI** in the ProcessWire admin interface.
-
 ### Basic Settings
 
-Configure these settings in the module configuration (Modules > Site > PromptAI > Configure):
+Configure in Modules > Site > PromptAI:
 
-- **AI Provider** (required): Choose from Anthropic, OpenAI, Gemini or DeepSeek (DeepSeek does not support image or file field processing)
-- **AI Model** (required): Specify the model to use (see provider documentation for available models)
+- **AI Provider** (required): Anthropic, OpenAI, Gemini, or DeepSeek
+- **AI Model** (required): The model to use (see provider documentation for available models)
 - **API Key** (required): Your API key for the selected provider
 - **System Prompt** (optional): A general instruction sent to the AI with every request
-- **Individual Prompt Buttons** (optional): Show separate "Send to AI" buttons for each prompt configuration instead of one general button
-- **Test Settings** (optional): Send a test request to verify your configuration
+- **Individual Prompt Buttons** (optional): Show separate buttons per prompt instead of one combined button
+- **Enable AI Tools** (optional): Allow the AI to call ProcessWire API tools for data retrieval
+- **Test Settings**: Send a test request to verify your configuration
 
 ### Prompt Configuration
 
-Navigate to **Setup > Prompt AI** to configure your AI prompts using the visual form interface:
+Navigate to **Setup > Prompt AI** to configure prompts:
 
-#### Configuration Fields
+Each prompt consists of:
 
-Each prompt configuration consists of:
+- **Label**: Optional identifier for the button and configuration overview
+- **Mode**: Page Mode (process on save) or Inline Mode (process on-demand)
+- **Template(s)**: Which templates this prompt applies to. Leave empty for all templates. Select repeater templates (labeled "Repeater: fieldname") to process repeater fields.
+- **Field(s)**: The field(s) to process
+- **Target Subfield**: For file/image fields — which subfield to write results to (default: `description`)
+- **Overwrite Field Content**: Whether AI responses overwrite existing content (page mode only, disabled by default)
+- **Prompt**: Instructions for the AI, with optional `{page.fieldname}` / `{item.fieldname}` placeholders
 
-- **Label**: Optional identifier for easy recognition
-- **Overwrite Target Field Content**: Controls whether AI responses overwrite existing content in target fields (disabled by default)
-- **Template(s)**: The template(s) this prompt applies to (leave empty for all templates, select multiple templates to apply to specific templates, or select a repeater template to process repeater fields)
-- **Source Field**: The field whose content is sent to the AI
-- **Target Field**: Where the AI result is saved (leave empty to overwrite the source field)
-- **Prompt**: Instructions for the AI (prefixed to the source field content)
+### Button Modes
 
-#### Managing Configurations
+**Single Button (default):**
+One "Save + Send to AI" button that processes all applicable prompts.
 
-- **Add**: Click "Add New Prompt Configuration" to create a new prompt
-- **Remove**: Click the trash icon to delete individual configurations
+**Individual Buttons:**
+Enable "Individual Prompt Buttons" in module configuration. Each prompt gets its own button labeled with the prompt's Label field.
 
-#### Button Behavior
+### Content Overwrite Protection
 
-PromptAI offers two button modes when editing pages:
+Per-prompt setting that controls how existing content is handled:
 
-**Single Button Mode (default):**
-- Shows one "Save + Send to AI" button
-- Processes all applicable prompt configurations when clicked
+- **Disabled (default)**: Only writes to empty fields, preserving existing content
+- **Enabled**: Always overwrites existing content
 
-**Individual Button Mode:**
-- Enable "Individual Prompt Buttons" in module configuration
-- Shows separate buttons for each prompt configuration
-- Button labels use the prompt's "Label" field (falls back to "Send to AI")
-- Only the selected prompt configuration is processed when clicked
-- Useful for selective AI processing and better user control
+This setting only applies in page mode. In inline mode, responses always replace the field content, but the page is not automatically saved.
 
-#### Template Selection
+> **Note:**
+> - Text fields: Field content is sent to AI with the prompt. The result replaces the field content.
+> - Image & file fields: Each file/image is sent individually. Results are written to the configured Target Subfield.
+> - Repeater items are processed individually with the same prompt.
+> - There is a 5-second throttle between AI requests to prevent abuse.
 
-The **Template(s)** field supports flexible template targeting:
+## Configuration Examples
 
-- **Empty selection**: Prompt applies to all templates (universal prompt)
-- **Single template**: Prompt applies only to pages using that specific template
-- **Multiple templates**: Prompt applies to pages using any of the selected templates
-- **Repeater templates**: Select repeater templates (labeled as "Repeater: fieldname") to process fields within repeater items
+### Regular Page Fields
 
-This allows you to create template-specific prompts or prompts that work across multiple related templates.
+**Text field processing:**
+- Template: `basic-page` | Field: `body`
+- Prompt: `Add an emoji at the beginning of this text`
+- Result: The `body` field content is sent to AI and updated with the result
 
-#### Content Overwrite Protection
+**Image descriptions:**
+- Template: `basic-page` | Field: `images`
+- Prompt: `Create a short alt-text for this image`
+- Result: Each image is analyzed, result saved to the image's description subfield
 
-The **"Overwrite Target Field Content"** setting can be configured per prompt and controls how the module handles existing content:
+**Multiple fields:**
+- Template: `blog-post` | Fields: `headline`, `summary`
+- Prompt: `Make this text more engaging and add an emoji`
+- Result: Both fields are processed with the same prompt
 
-- **Disabled (default)**: AI responses are only written to empty target fields/subfields, preserving existing content
-- **Enabled**: AI responses always overwrite existing content in target fields/subfields
+### Repeater Fields
 
-> [!NOTE]
-> - **Image & File fields**: Both work identically - the target field is treated as a custom subfield of the file/image (See https://processwire.com/blog/posts/pw-3.0.142/ for info about custom fields). If target is left empty, "description" is the default subfield.
-> - **Supported file formats**: PDF, RTF, Markdown (.md), JSON, XML, CSV, and plain text files.
-> - **File/Image processing**: Each file or image in the field is processed individually with the same prompt.
-> - **Repeater support**: Templates are automatically detected and labeled as "Repeater: fieldname" in the template dropdown.
-> - **Repeater processing**: Each repeater item is processed individually with the same prompt.
-> - **Compatibility**: The module supports both regular Repeater fields and Repeater Matrix fields.
+**Repeater text fields:**
+- Template: `Repeater: gallery` | Field: `caption`
+- Prompt: `Rewrite this caption to be more descriptive`
+- Result: Each repeater item's caption is processed individually
 
-### Supported field combinations / Examples:
+**Repeater image fields:**
+- Template: `Repeater: portfolio_items` | Field: `project_image`
+- Prompt: `Describe this portfolio image professionally`
+- Result: Each repeater item's images are analyzed individually
 
-#### Regular Page Fields
+### Placeholders
 
-1. **Source text field → Target text field:** Overwrites target field with the result.  
-   - Template(s): `basic-page`
-   - Source Field: `copy`
-   - Target Field: `copy2`
-   - Prompt: `Create a summary of the following text`
+**Page context for generation:**
+- Template: `blog-post` | Field: `summary`
+- Prompt: `Create a compelling summary for an article titled "{page.title}" about: {page.body}`
 
-2. **Source text field → No target field:** Overwrites source field with the result.  
-   - Template(s): `basic-page`
-   - Source Field: `copy`
-   - Target Field: (empty)
-   - Prompt: `Add an emoji to the following text`
+**Repeater context with parent page fields:**
+- Template: `Repeater: gallery_items` | Field: `caption`
+- Prompt: `Write a caption for this gallery item titled "{item.title}" from the {page.gallery_name} collection`
 
-3. **Source image field → No target field:** Sends each image to the AI; results are saved in the image description.  
-   - Template(s): `basic-page`
-   - Source Field: `images`
-   - Target Field: (empty)
-   - Prompt: `Create a short alt-text for this image`
+### Extending Placeholder Support
 
-4. **Source image field → Target subfield:** Sends each image to the AI; results are saved in the specified custom field.  
-   - Template(s): `basic-page`
-   - Source Field: `images`
-   - Target Field: `alt_text`
-   - Prompt: `Create a short alt-text for this image`
+By default, placeholders work with simple field types (text, numbers, booleans). For complex field types like PageArray (page references), extend the system using the hookable `PromptAI::fieldValueToString` method.
 
-5. **Source file field → Target subfield:** Sends each file to the AI; results are saved in the specified custom subfield.  
-   - Template(s): `basic-page`
-   - Source Field: `documents`
-   - Target Field: `summary`
-   - Prompt: `Summarize the key points from this document`
+Add this to your `/site/ready.php`:
 
-6. **Source file field → No target field:** Sends each file to the AI; results are saved in the file description.  
-   - Template(s): `basic-page`
-   - Source Field: `attachments`
-   - Target Field: (empty)
-   - Prompt: `Create a brief description of this document`
+```php
+<?php namespace ProcessWire;
 
-#### Repeater Fields
+wire()->addHookBefore('PromptAI::fieldValueToString', function($event) {
+    if (get_class($event->arguments(0)) === 'ProcessWire\PageArray') {
+        /** @var PageArray $pages */
+        $pages = $event->arguments(0);
+        $return = $pages->implode(', ', 'title');
+        $event->replace = true;
+        $event->return = $return;
+    }
+});
+```
 
-7. **Repeater text field processing:** Process text fields within repeater items.  
-   - Template(s): `Repeater: gallery`
-   - Source Field: `title`
-   - Target Field: `description`
-   - Prompt: `Create a compelling description based on this title`
+With this hook, a prompt like `Create content for a product in these categories: {page.categories}` will resolve to "Electronics, Computers, Accessories".
 
-8. **Repeater image field processing:** Process image fields within repeater items.  
-   - Template(s): `Repeater: portfolio_items`
-   - Source Field: `project_image`
-   - Target Field: (empty - uses description)
-   - Prompt: `Describe this portfolio image professionally`
+You can add similar hooks for Options fields, Datetime fields, or other custom Fieldtypes.
 
-9. **Repeater file field processing:** Process file fields within repeater items.  
-   - Template(s): `Repeater: resources`
-   - Source Field: `document`
-   - Target Field: `summary` (custom subfield)
-   - Prompt: `Extract the main topics from this document`
+## Running Tests
 
-10. **Repeater Matrix field processing:** Process fields within repeater matrix items.  
-    - Template(s): `Repeater: content_blocks`
-    - Source Field: `heading`
-    - Target Field: `subheading`
-    - Prompt: `Create a catchy subheading for this section`
+Tests use Pest PHP and are separate from production dependencies. To set up:
 
-11. **Multi-template text processing:** Apply the same prompt to multiple templates.  
-    - Template(s): `basic-page`, `blog-post`, `product-page`
-    - Source Field: `title`
-    - Target Field: `seo_title`
-    - Prompt: `Create an SEO-optimized title based on this page title`
+```bash
+cd tests
+composer install
+```
 
-**Note:** This is a beta release. While it performs well in production, please test thoroughly before deploying. Report any bugs via GitHub issues to help improve the module.
+To run:
+
+```bash
+ddev php site/modules/PromptAI/tests/vendor/bin/pest --configuration=site/modules/PromptAI/tests/phpunit.xml
+```
+
+## Requirements
+
+- ProcessWire >= 3.0.184
+- PHP >= 8.2
