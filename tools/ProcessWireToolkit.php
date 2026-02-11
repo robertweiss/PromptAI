@@ -11,10 +11,12 @@ class ProcessWireToolkit extends AbstractToolkit {
     }
 
     public function provide(): array {
-        return [
-            GetPagesTool::make(),
-            GetPageTool::make(),
-            GetFieldsTool::make(),
-        ];
+        $tools = [];
+        foreach (glob(__DIR__ . '/*Tool.php') as $file) {
+            require_once $file;
+            $className = 'ProcessWire\\' . basename($file, '.php');
+            $tools[] = $className::make();
+        }
+        return $tools;
     }
 }

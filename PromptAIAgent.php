@@ -62,15 +62,12 @@ class PromptAIAgent extends Agent {
             return [];
         }
 
-        $toolsDir = __DIR__ . '/tools/';
-        if (!is_dir($toolsDir)) {
+        $toolkitFile = __DIR__ . '/tools/ProcessWireToolkit.php';
+        if (!file_exists($toolkitFile)) {
             return [];
         }
 
-        // Require all tool files
-        foreach (glob($toolsDir . '*.php') as $file) {
-            require_once $file;
-        }
+        require_once $toolkitFile;
 
         return [
             ProcessWireToolkit::make(),

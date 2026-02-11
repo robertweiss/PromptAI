@@ -59,17 +59,17 @@ For image and file fields, configure which subfield the AI writes to:
 
 The "Target Subfield" option appears in the prompt configuration when file or image fields are selected. In inline mode, AI buttons appear next to all text subfield inputs automatically. See the [ProcessWire documentation on custom subfields](https://processwire.com/blog/posts/pw-3.0.142/) for more information.
 
-### AI Tools
+### AI Tools (experimental)
 
-When enabled, the AI can query your ProcessWire installation to answer questions about your content:
+The module ships with three example tools that allow the AI to query your ProcessWire installation:
 
-- **getPages**: Find pages by selector (e.g., "template=blog-post, limit=10, sort=-created")
-- **getPage**: Get detailed information about a single page including all text field values
+- **getPages**: Find pages by selector
+- **getPage**: Get detailed information about a single page
 - **getFields**: List available templates and their fields
 
-This lets you write prompts like *"List the 10 most recent blog posts as a bullet list with links"* and the AI will retrieve the data from your site.
+These tools are meant as starting points, not as fully usable fit-for-all-needs solutions. Their usefulness depends on how well you craft your prompts — the AI needs explicit instructions and context (via placeholders) to form meaningful queries. You may need to adapt or extend them for your specific use case. New tools can be added by dropping a `*Tool.php` file into the `tools/` directory.
 
-Tools enforce security constraints: selector sanitization, no `include=all`, only text fields exposed, admin pages excluded. Tools are disabled by default and must be explicitly enabled in module configuration.
+Tools are disabled by default and must be explicitly enabled in module configuration. Security constraints apply: selector sanitization, no `include=all`, only text fields exposed, admin pages excluded.
 
 ## Supported Fields
 
