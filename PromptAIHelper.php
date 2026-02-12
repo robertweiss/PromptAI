@@ -38,14 +38,7 @@ class PromptAIHelper {
         $availableFields = PromptAIHelper::getFieldOptions();
 
         foreach ($jsonData as $index => $config) {
-            $promptMatrixEntity = new PromptMatrixEntity();
-            $promptMatrixEntity->mode = $config['mode'] ?? 'page';
-            $promptMatrixEntity->templates = $config['templates'] ?? null;
-            $promptMatrixEntity->fields = $config['fields'] ?? null;
-            $promptMatrixEntity->prompt = $config['prompt'] ?? null;
-            $promptMatrixEntity->label = $config['label'] ?? null;
-            $promptMatrixEntity->overwriteTarget = $config['overwriteTarget'] ?? false;
-            $promptMatrixEntity->targetSubfield = $config['targetSubfield'] ?? 'description';
+            $promptMatrixEntity = PromptMatrixEntity::fromArray($config);
 
             // Validation
             // Mode is required

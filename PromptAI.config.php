@@ -1,13 +1,41 @@
 <?php namespace ProcessWire;
 
 class PromptMatrixEntity {
-    public ?string $mode;           // 'inline' or 'page'
-    public ?array $templates;        // Array of template IDs, null/empty = all templates
-    public ?array $fields;          // Array of field IDs (REQUIRED)
-    public ?string $prompt;         // AI instruction (REQUIRED)
-    public ?string $label;          // UI label (optional)
-    public ?bool $overwriteTarget;  // Only relevant for page mode
-    public ?string $targetSubfield; // Subfield for file/image fields (default: 'description')
+    public function __construct(
+        public ?string $mode = 'inline',
+        public ?array $templates = null,
+        public ?array $fields = null,
+        public ?string $prompt = null,
+        public ?string $label = null,
+        public ?bool $overwriteTarget = false,
+        public ?string $targetSubfield = 'description',
+    ) {}
+
+    public static function fromArray(array $config): self {
+        $targetSubfield = trim($config['targetSubfield'] ?? 'description');
+
+        return new self(
+            mode: $config['mode'] ?? 'inline',
+            templates: $config['templates'] ?? null,
+            fields: $config['fields'] ?? null,
+            prompt: $config['prompt'] ?? null,
+            label: $config['label'] ?? null,
+            overwriteTarget: $config['overwriteTarget'] ?? false,
+            targetSubfield: $targetSubfield ?: 'description',
+        );
+    }
+
+    public function toArray(): array {
+        return [
+            'mode' => $this->mode ?? 'inline',
+            'templates' => $this->templates ?? [],
+            'fields' => $this->fields ?? [],
+            'prompt' => $this->prompt ?? '',
+            'label' => $this->label ?? '',
+            'overwriteTarget' => $this->overwriteTarget ?? false,
+            'targetSubfield' => $this->targetSubfield ?? 'description',
+        ];
+    }
 }
 
 class PromptAIConfig extends ModuleConfig {

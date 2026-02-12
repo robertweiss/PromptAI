@@ -198,31 +198,16 @@ class PromptAIConfigForm {
         $initialData = [];
 
         foreach ($this->promptMatrix as $entity) {
-            $initialData[] = [
-                'mode' => $entity->mode ?: 'inline',
-                'templates' => $entity->templates ?: [],
-                'fields' => $entity->fields ?: [],
-                'prompt' => $entity->prompt ?: '',
-                'label' => $entity->label ?: '',
-                'overwriteTarget' => $entity->overwriteTarget ?? false,
-                'targetSubfield' => $entity->targetSubfield ?? 'description',
-            ];
+            $initialData[] = $entity->toArray();
         }
 
         // If no existing data, start with one empty fieldset
         if (empty($initialData)) {
-            $initialData[] = [
-                'mode' => 'inline',
-                'templates' => [],
-                'fields' => [],
-                'prompt' => '',
-                'label' => '',
-                'overwriteTarget' => false,
-                'targetSubfield' => 'description',
-            ];
+            $initialData[] = (new PromptMatrixEntity())->toArray();
         }
 
         $initialDataJson = json_encode($initialData);
+        $emptyFieldsetJson = json_encode((new PromptMatrixEntity())->toArray());
 
         // Collect file/image field IDs for conditional display of targetSubfield
         $fileFieldIds = [];
@@ -290,15 +275,7 @@ class PromptAIConfigForm {
                     return fields.some(id => this.fileFieldIds.includes(String(id)));
                 },
                 addFieldset() {
-                    this.fieldsets.push({
-                        mode: 'inline',
-                        templates: [],
-                        fields: [],
-                        prompt: '',
-                        label: '',
-                        overwriteTarget: false,
-                        targetSubfield: 'description'
-                    });
+                    this.fieldsets.push(JSON.parse('{$emptyFieldsetJson}'));
                     
                     // Initialize new asmSelect fields and scroll after DOM update
                     setTimeout(() => {
@@ -389,21 +366,15 @@ class PromptAIConfigForm {
                 continue; // Skip if no valid field IDs
             }
 
-            $mode = $config['mode'];
-            $prompt = $config['prompt'] ?? '';
-            $label = $config['label'] ?? '';
-            $overwriteTarget = $config['overwriteTarget'] ?? false;
-            $targetSubfield = trim($config['targetSubfield'] ?? 'description') ?: 'description';
-
-            $jsonConfig[] = [
-                'mode' => $mode,
+            $jsonConfig[] = PromptMatrixEntity::fromArray([
+                'mode' => $config['mode'],
                 'templates' => $template,
                 'fields' => $fields,
-                'prompt' => $prompt,
-                'label' => $label,
-                'overwriteTarget' => $overwriteTarget,
-                'targetSubfield' => $targetSubfield,
-            ];
+                'prompt' => $config['prompt'] ?? '',
+                'label' => $config['label'] ?? '',
+                'overwriteTarget' => $config['overwriteTarget'] ?? false,
+                'targetSubfield' => $config['targetSubfield'] ?? 'description',
+            ])->toArray();
         }
 
         $promptMatrixString = json_encode($jsonConfig, JSON_PRETTY_PRINT);

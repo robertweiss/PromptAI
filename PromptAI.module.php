@@ -52,109 +52,9 @@ class PromptAI extends Process implements Module {
         header('Content-Type: application/json');
 
         try {
-            // Get input parameters
-            $content = wire('input')->post->text('content', ['maxLength' => 0]);
-            $promptText = wire('input')->post->text('prompt', ['maxLength' => 0]);
-            $pageId = wire('input')->post->int('page_id');
-            $repeaterItemId = wire('input')->post->int('repeater_item_id');
-            $imageFieldName = wire('input')->post->text('image_field');
-            $imageBasename = wire('input')->post->text('image_basename');
-
-            if (!$promptText) {
-                throw new \Exception(__('No prompt provided'));
-            }
-
-            // Only require imageBasename if we're dealing with file fields
-            if ($imageFieldName && !$imageBasename) {
-                throw new \Exception(__('No file provided'));
-            }
-
-            // Get page for context (needed for placeholder substitution)
-            $page = null;
-            if ($pageId) {
-                $page = wire('pages')->get($pageId);
-                if (!$page->id) {
-                    throw new \Exception(__('Page not found'));
-                }
-            }
-
-            // Get repeater item if provided
-            $repeaterItem = null;
-            if ($repeaterItemId) {
-                $repeaterItem = wire('pages')->get($repeaterItemId);
-                if (!$repeaterItem->id) {
-                    throw new \Exception(__('Repeater item not found'));
-                }
-            }
-
-            // Initialize agent
-            $this->initAgent();
-
-            if (!isset($this->agent)) {
-                throw new \Exception(__('AI agent not initialized'));
-            }
-
-            // Process content with placeholder substitution
-            $fullPrompt = $page ? PromptAIHelper::substituteAndPreparePrompt($promptText, $page, $content, $repeaterItem) : trim($promptText.PHP_EOL.$content);
-
-            if ($imageBasename && $pageId && $imageFieldName) {
-                // Validate page is available (should already be loaded above)
-                if (!$page) {
-                    throw new \Exception(__('Page not found'));
-                }
-
-                // Get the field definition to determine its type
-                $fieldDef = wire('fields')->get($imageFieldName);
-                if (!$fieldDef) {
-                    throw new \Exception(__('Field definition not found').': '.$imageFieldName);
-                }
-
-                // Determine file type from ProcessWire field type
-                $isImageField = ((string)$fieldDef->type === 'FieldtypeImage');
-                $fileType = $isImageField ? 'image' : 'document';
-
-                // Load field from repeater item if available, otherwise from main page
-                $fieldSource = $repeaterItem ?: $page;
-                $imageField = $fieldSource->get($imageFieldName);
-                if (!$imageField) {
-                    throw new \Exception(__('Field not found on page').': '.$imageFieldName);
-                }
-
-                // Find the specific file - try multiple approaches
-                $file = $imageField->getFile($imageBasename);
-
-                // If not found, try to find by hash
-                if (!$file && strlen($imageBasename) === 32) {
-                    // It's a hash, try to find the file manually
-                    foreach ($imageField as $f) {
-                        if (strpos($f->basename, $imageBasename) !== false) {
-                            $file = $f;
-                            break;
-                        }
-                    }
-                }
-
-                if (!$file) {
-                    throw new \Exception(__('File not found').': '.$imageBasename.' in field '.$imageFieldName);
-                }
-
-                // Check if it's an image and resize if needed
-                if ($fileType === 'image' && $file instanceof \ProcessWire\Pageimage) {
-                    $resized = $file->width(800);
-                    $filePath = $resized->filename;
-                } else {
-                    $filePath = $file->filename;
-                }
-
-                // File/image processing with correct type
-                $result = $this->chat($fullPrompt, true, $filePath, $fileType);
-//                ray($filePath, $fileType);;
-            } else {
-                // Text processing
-                $result = $this->chat($fullPrompt);
-            }
-
-//            ray($fullPrompt, $result);
+            $message = $this->prepareInlineRequest();
+            $response = $this->agent->chat($message);
+            $result = $response->getContent();
 
             if (!$result) {
                 throw new \Exception(__('AI returned empty response'));
@@ -174,120 +74,8 @@ class PromptAI extends Process implements Module {
 
     private function executeInlineProcessStream(): void {
         try {
-            // Get input parameters
-            $content = wire('input')->post->text('content', ['maxLength' => 0]);
-            $promptText = wire('input')->post->text('prompt', ['maxLength' => 0]);
-            $pageId = wire('input')->post->int('page_id');
-            $repeaterItemId = wire('input')->post->int('repeater_item_id');
-            $imageFieldName = wire('input')->post->text('image_field');
-            $imageBasename = wire('input')->post->text('image_basename');
+            $message = $this->prepareInlineRequest();
 
-            if (!$promptText) {
-                throw new \Exception(__('No prompt provided'));
-            }
-
-            if ($imageFieldName && !$imageBasename) {
-                throw new \Exception(__('No file provided'));
-            }
-
-            // Get page for context
-            $page = null;
-            if ($pageId) {
-                $page = wire('pages')->get($pageId);
-                if (!$page->id) {
-                    throw new \Exception(__('Page not found'));
-                }
-            }
-
-            // Get repeater item if provided
-            $repeaterItem = null;
-            if ($repeaterItemId) {
-                $repeaterItem = wire('pages')->get($repeaterItemId);
-                if (!$repeaterItem->id) {
-                    throw new \Exception(__('Repeater item not found'));
-                }
-            }
-
-            // Initialize agent
-            $this->initAgent();
-
-            if (!isset($this->agent)) {
-                throw new \Exception(__('AI agent not initialized'));
-            }
-
-            // Process content with placeholder substitution
-            $fullPrompt = $page ? PromptAIHelper::substituteAndPreparePrompt($promptText, $page, $content, $repeaterItem) : trim($promptText.PHP_EOL.$content);
-
-            // Build the message
-            $message = new UserMessage($fullPrompt);
-
-            if ($imageBasename && $pageId && $imageFieldName) {
-                if (!$page) {
-                    throw new \Exception(__('Page not found'));
-                }
-
-                $fieldDef = wire('fields')->get($imageFieldName);
-                if (!$fieldDef) {
-                    throw new \Exception(__('Field definition not found').': '.$imageFieldName);
-                }
-
-                $isImageField = ((string)$fieldDef->type === 'FieldtypeImage');
-                $fileType = $isImageField ? 'image' : 'document';
-
-                $fieldSource = $repeaterItem ?: $page;
-                $imageField = $fieldSource->get($imageFieldName);
-                if (!$imageField) {
-                    throw new \Exception(__('Field not found on page').': '.$imageFieldName);
-                }
-
-                $file = $imageField->getFile($imageBasename);
-
-                if (!$file && strlen($imageBasename) === 32) {
-                    foreach ($imageField as $f) {
-                        if (strpos($f->basename, $imageBasename) !== false) {
-                            $file = $f;
-                            break;
-                        }
-                    }
-                }
-
-                if (!$file) {
-                    throw new \Exception(__('File not found').': '.$imageBasename.' in field '.$imageFieldName);
-                }
-
-                if ($fileType === 'image' && $file instanceof \ProcessWire\Pageimage) {
-                    $resized = $file->width(800);
-                    $filePath = $resized->filename;
-                } else {
-                    $filePath = $file->filename;
-                }
-
-                $fileContents = file_get_contents($filePath);
-                $mimeType = PromptAIHelper::getMediaType($filePath);
-
-                if ($fileContents) {
-                    if ($fileType === 'image') {
-                        $supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-                        if (!in_array($mimeType, $supportedImageTypes)) {
-                            throw new \Exception("Unsupported image type: {$mimeType}. Supported types: ".implode(', ', $supportedImageTypes));
-                        }
-                        $message->addAttachment(
-                            new Image(base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType)
-                        );
-                    } else {
-                        $defaultSupportedDocTypes = ['application/pdf', 'text/plain'];
-                        $supportedDocTypes = $supportedDocTypes[$this->provider] ?? $defaultSupportedDocTypes;
-                        if (!in_array($mimeType, $supportedDocTypes)) {
-                            throw new \Exception("Unsupported document type: {$mimeType}. Supported types: ".implode(', ', $supportedDocTypes));
-                        }
-                        $message->addAttachment(
-                            new Document(base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType)
-                        );
-                    }
-                }
-            }
-
-            // Start SSE stream
             SSE::header();
 
             $response = $this->agent->stream($message);
@@ -318,6 +106,158 @@ class PromptAI extends Process implements Module {
             SSE::send($e->getMessage(), 'error');
             SSE::close();
         }
+    }
+
+    /**
+     * Parse POST parameters, validate, load page/repeater, init agent,
+     * resolve file if needed, and return a built UserMessage.
+     */
+    private function prepareInlineRequest(): UserMessage {
+        $content = wire('input')->post->text('content', ['maxLength' => 0]);
+        $promptText = wire('input')->post->text('prompt', ['maxLength' => 0]);
+        $pageId = wire('input')->post->int('page_id');
+        $repeaterItemId = wire('input')->post->int('repeater_item_id');
+        $imageFieldName = wire('input')->post->text('image_field');
+        $imageBasename = wire('input')->post->text('image_basename');
+
+        if (!$promptText) {
+            throw new \Exception(__('No prompt provided'));
+        }
+
+        // Only require imageBasename if we're dealing with file fields
+        if ($imageFieldName && !$imageBasename) {
+            throw new \Exception(__('No file provided'));
+        }
+
+        // Get page for context (needed for placeholder substitution)
+        $page = null;
+        if ($pageId) {
+            $page = wire('pages')->get($pageId);
+            if (!$page->id) {
+                throw new \Exception(__('Page not found'));
+            }
+        }
+
+        // Get repeater item if provided
+        $repeaterItem = null;
+        if ($repeaterItemId) {
+            $repeaterItem = wire('pages')->get($repeaterItemId);
+            if (!$repeaterItem->id) {
+                throw new \Exception(__('Repeater item not found'));
+            }
+        }
+
+        // Initialize agent
+        $this->initAgent();
+
+        if (!isset($this->agent)) {
+            throw new \Exception(__('AI agent not initialized'));
+        }
+
+        // Process content with placeholder substitution
+        $fullPrompt = $page
+            ? PromptAIHelper::substituteAndPreparePrompt($promptText, $page, $content, $repeaterItem)
+            : trim($promptText.PHP_EOL.$content);
+
+        $filePath = null;
+        $fileType = 'image';
+
+        if ($imageBasename && $pageId && $imageFieldName) {
+            if (!$page) {
+                throw new \Exception(__('Page not found'));
+            }
+            $resolved = $this->resolveFile($page, $repeaterItem, $imageFieldName, $imageBasename);
+            $filePath = $resolved['path'];
+            $fileType = $resolved['type'];
+        }
+
+        return $this->buildMessage($fullPrompt, $filePath, $fileType);
+    }
+
+    /**
+     * Look up a file by field name and basename/hash, resize images.
+     *
+     * @return array{path: string, type: string}
+     */
+    private function resolveFile(Page $page, ?Page $repeaterItem, string $imageFieldName, string $imageBasename): array {
+        $fieldDef = wire('fields')->get($imageFieldName);
+        if (!$fieldDef) {
+            throw new \Exception(__('Field definition not found').': '.$imageFieldName);
+        }
+
+        $isImageField = ((string)$fieldDef->type === 'FieldtypeImage');
+        $fileType = $isImageField ? 'image' : 'document';
+
+        $fieldSource = $repeaterItem ?: $page;
+        $imageField = $fieldSource->get($imageFieldName);
+        if (!$imageField) {
+            throw new \Exception(__('Field not found on page').': '.$imageFieldName);
+        }
+
+        // Find the specific file - try multiple approaches
+        $file = $imageField->getFile($imageBasename);
+
+        // If not found, try to find by hash
+        if (!$file && strlen($imageBasename) === 32) {
+            foreach ($imageField as $f) {
+                if (strpos($f->basename, $imageBasename) !== false) {
+                    $file = $f;
+                    break;
+                }
+            }
+        }
+
+        if (!$file) {
+            throw new \Exception(__('File not found').': '.$imageBasename.' in field '.$imageFieldName);
+        }
+
+        // Check if it's an image and resize if needed
+        if ($fileType === 'image' && $file instanceof \ProcessWire\Pageimage) {
+            $resized = $file->width(800);
+            $filePath = $resized->filename;
+        } else {
+            $filePath = $file->filename;
+        }
+
+        return ['path' => $filePath, 'type' => $fileType];
+    }
+
+    /**
+     * Create a UserMessage with optional file/image attachment.
+     */
+    private function buildMessage(string $prompt, ?string $filePath = null, string $fileType = 'image'): UserMessage {
+        $message = new UserMessage($prompt);
+
+        if ($filePath) {
+            $fileContents = file_get_contents($filePath);
+            $mimeType = PromptAIHelper::getMediaType($filePath);
+
+            if ($fileContents) {
+                if ($fileType === 'image') {
+                    $supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+                    if (!in_array($mimeType, $supportedImageTypes)) {
+                        throw new \Exception("Unsupported image type: {$mimeType}. Supported types: ".implode(', ', $supportedImageTypes));
+                    }
+
+                    $message->addAttachment(
+                        new Image(base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType)
+                    );
+                } else {
+                    $supportedDocTypes = ['application/pdf', 'text/plain'];
+
+                    if (!in_array($mimeType, $supportedDocTypes)) {
+                        throw new \Exception("Unsupported document type: {$mimeType}. Supported types: ".implode(', ', $supportedDocTypes));
+                    }
+
+                    $message->addAttachment(
+                        new Document(base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType)
+                    );
+                }
+            }
+        }
+
+        return $message;
     }
 
     public function init() {
@@ -361,104 +301,7 @@ class PromptAI extends Process implements Module {
         }
 
         try {
-            $message = new UserMessage($prompt);
-            if ($file) {
-                $fileContents = file_get_contents($file);
-                $mimeType = PromptAIHelper::getMediaType($file);
-
-                if ($fileContents) {
-                    if ($fileType === 'image') {
-                        // Validate image MIME types
-                        $supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-
-                        if (!in_array($mimeType, $supportedImageTypes)) {
-                            throw new \Exception("Unsupported image type: {$mimeType}. Supported types: ".implode(', ', $supportedImageTypes));
-                        }
-
-                        $message->addAttachment(
-                            new Image(
-                                base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType
-                            )
-                        );
-                    } else {
-                        $defaultSupportedDocTypes = ['application/pdf', 'text/plain'];
-
-//                        $openAiSupportedDocTypes = [
-//                            'application/pdf',
-//                            'application/msword',
-//                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-//                            'application/vnd.ms-excel',
-//                            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-//                            'application/vnd.ms-powerpoint',
-//                            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-//                            'text/plain',
-//                            'text/rtf',
-//                            'application/rtf',
-//                            'text/csv',
-//                            'application/vnd.ms-outlook',
-//                            'message/rfc822',
-//                            'text/markdown',
-//                            'text/x-markdown',
-//                            'text/html',
-//                            'application/json',
-//                            'application/x-ndjson',
-//                            'application/xml',
-//                            'text/xml',
-//                        ];
-//
-//                        $geminiSupportedDocTypes = [
-//                            'application/pdf',
-//                            'text/plain',
-//                            'text/rtf',
-//                            'application/rtf',
-//                            'text/csv',
-//                            'text/markdown',
-//                            'text/x-markdown',
-//                            'text/html',
-//                            'application/json',
-//                            'application/x-ndjson',
-//                            'application/xml',
-//                            'text/xml',
-//                        ];
-//
-//                        $deepseekSupportedDocTypes = [
-//                            'application/pdf',
-//                            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-//                            'text/plain',
-//                            'text/rtf',
-//                            'application/rtf',
-//                            'text/csv',
-//                            'text/markdown',
-//                            'text/x-markdown',
-//                            'text/html',
-//                            'application/json',
-//                            'application/x-ndjson',
-//                            'application/xml',
-//                            'text/xml',
-//                        ];
-//
-//                        $supportedDocTypes = [
-//                            'anthropic' => $defaultSupportedDocTypes,
-//                            'openai' => $openAiSupportedDocTypes,
-//                            'gemini' => $geminiSupportedDocTypes,
-//                            'deepseek' => $deepseekSupportedDocTypes,
-//                        ];
-
-                        $supportedDocTypes = $supportedDocTypes[$this->provider] ?? $defaultSupportedDocTypes;
-
-                        if (!in_array($mimeType, $supportedDocTypes)) {
-                            throw new \Exception("Unsupported document type: {$mimeType}. Supported types: ".implode(', ', $supportedDocTypes));
-                        }
-
-                        $message->addAttachment(
-                            new Document(
-                                base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType
-                            )
-                        );
-                    }
-                }
-            }
-
+            $message = $this->buildMessage($prompt, $file, $fileType);
             $response = $this->agent->chat($message);
         } catch (NeuronException $e) {
             $this->error($e->getMessage());
@@ -491,7 +334,7 @@ class PromptAI extends Process implements Module {
         }
 
         $request = __('This is a test for the AI. Do you hear me?');
-        $response = $this->chat($request, false);;
+        $response = $this->chat($request, false);
 
         return json_encode([
                                'request' => $request,
