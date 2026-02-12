@@ -28,8 +28,8 @@ class PromptAIPageMode extends Wire {
      * Add "Save + Send to AI" button(s) to page editor
      */
     public function addDropdownOption(HookEvent $event): void {
-        /** @var Page $page */
-        $page = $this->wire('pages')->get($this->wire('input')->get->id);
+        $process = $event->object; /** @var ProcessPageEdit $process */
+        $page = $process->getPage(); /** @var Page $page */
 
         // Don't show option in admin templates
         if (in_array($page->template->name, PromptAIHelper::$adminTemplates)) {
