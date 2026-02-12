@@ -16,6 +16,7 @@
     const config = {
         prompts: pwConfig.prompts || {},
         ajaxUrl: pwConfig.ajaxUrl || '',
+        streamUrl: pwConfig.streamUrl || '',
         pageId: pwConfig.pageId || 0,
         useNativeButtons: pwConfig.useNativeButtons || false
     };
@@ -222,6 +223,186 @@
             }
         }
 
+        if (config.streamUrl) {
+            processFieldStreaming(actualField, inputfield, isTinyMCE, requestData);
+        } else {
+            processFieldNonStreaming(actualField, inputfield, isTinyMCE, requestData);
+        }
+    }
+
+    /**
+     * Process field via SSE streaming (fetch + ReadableStream)
+     */
+    function processFieldStreaming(actualField, inputfield, isTinyMCE, requestData) {
+        const isCKEditor = actualField.classList.contains('InputfieldCKEditorNormal') && typeof CKEDITOR !== 'undefined' && actualField.id;
+        const isRichEditor = isTinyMCE || isCKEditor;
+        let accumulatedText = '';
+        let throttleTimer = null;
+        const THROTTLE_MS = 150;
+
+        function scrollIframeDocToBottom(doc) {
+            try {
+                if (doc) {
+                    doc.body.scrollTop = doc.body.scrollHeight;
+                    doc.documentElement.scrollTop = doc.documentElement.scrollHeight;
+                }
+            } catch (e) {}
+        }
+
+        function updateField(text, isFinal) {
+            if (isTinyMCE && typeof tinymce !== 'undefined' && actualField.id) {
+                const editor = tinymce.get(actualField.id);
+                if (editor) {
+                    editor.setContent(text);
+                    if (isFinal) editor.fire('change');
+                    setTimeout(function() {
+                        scrollIframeDocToBottom(editor.getDoc());
+                    }, 10);
+                } else {
+                    actualField.value = text;
+                    actualField.scrollTop = actualField.scrollHeight;
+                }
+            } else if (isCKEditor) {
+                const editor = CKEDITOR.instances[actualField.id];
+                if (editor) {
+                    editor.setData(text);
+                    editor.once('dataReady', function() {
+                        scrollIframeDocToBottom(editor.document && editor.document.$);
+                    });
+                }
+            } else {
+                actualField.value = text;
+                actualField.scrollTop = actualField.scrollHeight;
+            }
+        }
+
+        function scheduleUpdate() {
+            if (isRichEditor) {
+                if (!throttleTimer) {
+                    throttleTimer = setTimeout(function() {
+                        throttleTimer = null;
+                        updateField(accumulatedText, false);
+                    }, THROTTLE_MS);
+                }
+            } else {
+                updateField(accumulatedText, false);
+            }
+        }
+
+        fetch(config.streamUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: new URLSearchParams(requestData)
+        })
+        .then(function(response) {
+            if (!response.ok) {
+                throw new Error('HTTP ' + response.status);
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+
+            function processStream() {
+                return reader.read().then(function(result) {
+                    if (result.done) {
+                        // Stream finished — do final update
+                        if (throttleTimer) {
+                            clearTimeout(throttleTimer);
+                            throttleTimer = null;
+                        }
+                        if (accumulatedText) {
+                            updateField(accumulatedText, true);
+                        }
+                        hideLoading(actualField, inputfield);
+                        actualField.dispatchEvent(new Event('change', { bubbles: true }));
+                        actualField.dispatchEvent(new Event('input', { bubbles: true }));
+                        return;
+                    }
+
+                    buffer += decoder.decode(result.value, { stream: true });
+
+                    // Parse SSE events from buffer
+                    var parts = buffer.split('\n\n');
+                    // Last part may be incomplete
+                    buffer = parts.pop();
+
+                    for (var i = 0; i < parts.length; i++) {
+                        var block = parts[i].trim();
+                        if (!block) continue;
+
+                        var eventType = 'message';
+                        var data = '';
+                        var lines = block.split('\n');
+
+                        for (var j = 0; j < lines.length; j++) {
+                            var line = lines[j];
+                            if (line.startsWith('event: ')) {
+                                eventType = line.substring(7).trim();
+                            } else if (line.startsWith('data: ')) {
+                                data = line.substring(6);
+                            } else if (line.startsWith('data:')) {
+                                data = line.substring(5);
+                            }
+                            // Skip comments (: ping, : keep-alive) and padding
+                        }
+
+                        if (eventType === 'chunk' && data) {
+                            try {
+                                var text = JSON.parse(data);
+                                accumulatedText += text;
+                                scheduleUpdate();
+                            } catch (e) {
+                                // Skip malformed chunks
+                            }
+                        } else if (eventType === 'error' && data) {
+                            try {
+                                var errorMsg = JSON.parse(data);
+                                showError(errorMsg, actualField);
+                            } catch (e) {
+                                showError(data, actualField);
+                            }
+                            hideLoading(actualField, inputfield);
+                            return;
+                        } else if (eventType === 'close') {
+                            // Server signals end — final update
+                            if (throttleTimer) {
+                                clearTimeout(throttleTimer);
+                                throttleTimer = null;
+                            }
+                            if (accumulatedText) {
+                                updateField(accumulatedText, true);
+                            }
+                            hideLoading(actualField, inputfield);
+                            actualField.dispatchEvent(new Event('change', { bubbles: true }));
+                            actualField.dispatchEvent(new Event('input', { bubbles: true }));
+                            return;
+                        }
+                    }
+
+                    return processStream();
+                });
+            }
+
+            return processStream();
+        })
+        .catch(function(error) {
+            if (throttleTimer) {
+                clearTimeout(throttleTimer);
+                throttleTimer = null;
+            }
+            hideLoading(actualField, inputfield);
+            showError('Network error: ' + error.message, actualField);
+        });
+    }
+
+    /**
+     * Process field via non-streaming JSON fetch (fallback)
+     */
+    function processFieldNonStreaming(actualField, inputfield, isTinyMCE, requestData) {
         fetch(config.ajaxUrl, {
             method: 'POST',
             headers: {
@@ -235,28 +416,21 @@
             hideLoading(actualField, inputfield);
 
             if (data.success) {
-                // Check if this is a TinyMCE field
                 if (isTinyMCE && typeof tinymce !== 'undefined' && actualField.id) {
-                    // Use TinyMCE API to set content
                     const editor = tinymce.get(actualField.id);
                     if (editor) {
                         editor.setContent(data.result);
-                        // Trigger change event on the editor
                         editor.fire('change');
                     } else {
-                        // Fallback if editor not found
                         actualField.value = data.result;
                     }
-                    // Check if this is a CKEditor field
                 } else if (actualField.classList.contains('InputfieldCKEditorNormal') && typeof CKEDITOR !== 'undefined' && actualField.id) {
                     const editor = CKEDITOR.instances[actualField.id];
                     editor.setData(data.result);
                 } else {
-                    // Regular textarea/input
                     actualField.value = data.result;
                 }
 
-                // Trigger change event for ProcessWire's dirty detection
                 actualField.dispatchEvent(new Event('change', { bubbles: true }));
                 actualField.dispatchEvent(new Event('input', { bubbles: true }));
             } else {

@@ -101,10 +101,12 @@ class PromptAIInlineMode extends Wire {
 
         // Add JavaScript config
         $ajaxUrl = $this->wire('config')->urls->admin . 'setup/prompt-ai/?action=inline_process';
+        $streamUrl = $this->wire('config')->urls->admin . 'setup/prompt-ai/?action=inline_process_stream';
 
         $this->wire('config')->js('PromptAIInlineMode', [
             'prompts' => $prompts,
             'ajaxUrl' => $ajaxUrl,
+            'streamUrl' => $streamUrl,
             'pageId' => $this->wire('input')->get->int('id'),
             'useNativeButtons' => true,
         ]);

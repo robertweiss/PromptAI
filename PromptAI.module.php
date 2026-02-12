@@ -5,6 +5,7 @@ require_once __DIR__.'/PromptAIConfigForm.php';
 require_once __DIR__.'/PromptAIHelper.php';
 require_once __DIR__.'/PromptAIInlineMode.php';
 require_once __DIR__.'/PromptAIPageMode.php';
+require_once __DIR__.'/SSE.php';
 
 use NeuronAI\Chat\Messages\UserMessage;
 use NeuronAI\Chat\Messages\AssistantMessage;
@@ -25,6 +26,12 @@ class PromptAI extends Process implements Module {
     private int $throttleSave;
 
     public function ___execute() {
+        // Handle SSE streaming requests for inline mode
+        if (wire('input')->get('action') === 'inline_process_stream') {
+            $this->executeInlineProcessStream();
+            return ' ';
+        }
+
         // Handle AJAX requests for inline mode
         if (wire('input')->get('action') === 'inline_process') {
             return $this->executeInlineProcess();
@@ -162,6 +169,154 @@ class PromptAI extends Process implements Module {
                                    'success' => false,
                                    'error' => $e->getMessage(),
                                ]);
+        }
+    }
+
+    private function executeInlineProcessStream(): void {
+        try {
+            // Get input parameters
+            $content = wire('input')->post->text('content', ['maxLength' => 0]);
+            $promptText = wire('input')->post->text('prompt', ['maxLength' => 0]);
+            $pageId = wire('input')->post->int('page_id');
+            $repeaterItemId = wire('input')->post->int('repeater_item_id');
+            $imageFieldName = wire('input')->post->text('image_field');
+            $imageBasename = wire('input')->post->text('image_basename');
+
+            if (!$promptText) {
+                throw new \Exception(__('No prompt provided'));
+            }
+
+            if ($imageFieldName && !$imageBasename) {
+                throw new \Exception(__('No file provided'));
+            }
+
+            // Get page for context
+            $page = null;
+            if ($pageId) {
+                $page = wire('pages')->get($pageId);
+                if (!$page->id) {
+                    throw new \Exception(__('Page not found'));
+                }
+            }
+
+            // Get repeater item if provided
+            $repeaterItem = null;
+            if ($repeaterItemId) {
+                $repeaterItem = wire('pages')->get($repeaterItemId);
+                if (!$repeaterItem->id) {
+                    throw new \Exception(__('Repeater item not found'));
+                }
+            }
+
+            // Initialize agent
+            $this->initAgent();
+
+            if (!isset($this->agent)) {
+                throw new \Exception(__('AI agent not initialized'));
+            }
+
+            // Process content with placeholder substitution
+            $fullPrompt = $page ? PromptAIHelper::substituteAndPreparePrompt($promptText, $page, $content, $repeaterItem) : trim($promptText.PHP_EOL.$content);
+
+            // Build the message
+            $message = new UserMessage($fullPrompt);
+
+            if ($imageBasename && $pageId && $imageFieldName) {
+                if (!$page) {
+                    throw new \Exception(__('Page not found'));
+                }
+
+                $fieldDef = wire('fields')->get($imageFieldName);
+                if (!$fieldDef) {
+                    throw new \Exception(__('Field definition not found').': '.$imageFieldName);
+                }
+
+                $isImageField = ((string)$fieldDef->type === 'FieldtypeImage');
+                $fileType = $isImageField ? 'image' : 'document';
+
+                $fieldSource = $repeaterItem ?: $page;
+                $imageField = $fieldSource->get($imageFieldName);
+                if (!$imageField) {
+                    throw new \Exception(__('Field not found on page').': '.$imageFieldName);
+                }
+
+                $file = $imageField->getFile($imageBasename);
+
+                if (!$file && strlen($imageBasename) === 32) {
+                    foreach ($imageField as $f) {
+                        if (strpos($f->basename, $imageBasename) !== false) {
+                            $file = $f;
+                            break;
+                        }
+                    }
+                }
+
+                if (!$file) {
+                    throw new \Exception(__('File not found').': '.$imageBasename.' in field '.$imageFieldName);
+                }
+
+                if ($fileType === 'image' && $file instanceof \ProcessWire\Pageimage) {
+                    $resized = $file->width(800);
+                    $filePath = $resized->filename;
+                } else {
+                    $filePath = $file->filename;
+                }
+
+                $fileContents = file_get_contents($filePath);
+                $mimeType = PromptAIHelper::getMediaType($filePath);
+
+                if ($fileContents) {
+                    if ($fileType === 'image') {
+                        $supportedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+                        if (!in_array($mimeType, $supportedImageTypes)) {
+                            throw new \Exception("Unsupported image type: {$mimeType}. Supported types: ".implode(', ', $supportedImageTypes));
+                        }
+                        $message->addAttachment(
+                            new Image(base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType)
+                        );
+                    } else {
+                        $defaultSupportedDocTypes = ['application/pdf', 'text/plain'];
+                        $supportedDocTypes = $supportedDocTypes[$this->provider] ?? $defaultSupportedDocTypes;
+                        if (!in_array($mimeType, $supportedDocTypes)) {
+                            throw new \Exception("Unsupported document type: {$mimeType}. Supported types: ".implode(', ', $supportedDocTypes));
+                        }
+                        $message->addAttachment(
+                            new Document(base64_encode($fileContents), AttachmentContentType::BASE64, $mimeType)
+                        );
+                    }
+                }
+            }
+
+            // Start SSE stream
+            SSE::header();
+
+            $response = $this->agent->stream($message);
+
+            foreach ($response as $text) {
+                if (!$text) {
+                    continue;
+                }
+
+                // Skip tool call messages
+                if ($text instanceof \NeuronAI\Chat\Messages\ToolCallMessage) {
+                    continue;
+                }
+
+                SSE::send($text, 'chunk');
+
+                if (connection_aborted()) {
+                    break;
+                }
+            }
+
+            SSE::close();
+        } catch (\Exception $e) {
+            // If headers haven't been sent yet, start SSE first
+            if (!headers_sent()) {
+                SSE::header();
+            }
+            SSE::send($e->getMessage(), 'error');
+            SSE::close();
         }
     }
 
