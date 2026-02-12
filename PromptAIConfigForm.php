@@ -41,6 +41,7 @@ class PromptAIConfigForm {
         $form->attr('method', 'post');
         $form->attr('action', './');
         $form->attr('x-data', 'promptConfigForm()');
+        $form->attr('x-on:submit', 'validateForm($event)');
 
         // Notice of no configurations set
         $noConfigLabel = '<div x-show="fieldsets.length === 0" class="notice"><p>'.__('No prompt configurations defined yet. Click "Add New Prompt Configuration" to get started.').'</p></div>';
@@ -107,13 +108,21 @@ class PromptAIConfigForm {
             </div>
         ';
 
-        $fieldset->setMarkup(['list' => '<div class="prompt-ai-config--item InputfieldFieldset">'.$headerHtml."<ul {attrs}>{out}</ul></div>",]);
+        $errorContainerHtml = '
+            <div class="promptai-validation-errors" x-show="Object.keys(errors[index] || {}).length > 0" x-cloak>
+                <template x-for="(msg, key) in (errors[index] || {})">
+                    <div class="promptai-error-msg"><i class="fa fa-exclamation-triangle"></i> <span x-text="msg"></span></div>
+                </template>
+            </div>
+        ';
+
+        $fieldset->setMarkup(['list' => '<div class="prompt-ai-config--item InputfieldFieldset">'.$headerHtml.$errorContainerHtml."<ul {attrs}>{out}</ul></div>",]);
 
         // Fieldset Label
         /** @var InputfieldText $field */
         $field = $fieldset->InputfieldText;
         $field->label = __('Label');
-        $field->notes = __('(optional, for identification)');
+        $field->notes = __('(required)');
         $field->attr(['x-model' => 'fieldset.label']);
         $field->columnWidth = 50;
         $fieldset->add($field);
@@ -129,11 +138,11 @@ class PromptAIConfigForm {
         $field->value = '
             <div class="InputfieldRadiosStacked">
                 <label style="display: inline-block; margin-right: 20px;">
-                    <input class="uk-radio" type="radio" value="inline" x-model="fieldset.mode" x-bind:name="\'mode_\' + index" required>
+                    <input class="uk-radio" type="radio" value="inline" x-model="fieldset.mode" x-bind:name="\'mode_\' + index">
                     ' . $inlineModeLabel . '
                 </label>
                 <label style="display: inline-block;">
-                    <input class="uk-radio" type="radio" value="page" x-model="fieldset.mode" x-bind:name="\'mode_\' + index" required>
+                    <input class="uk-radio" type="radio" value="page" x-model="fieldset.mode" x-bind:name="\'mode_\' + index">
                     ' . $pageModeLabel . '
                 </label>
             </div>
@@ -157,7 +166,7 @@ class PromptAIConfigForm {
         $field->label = __('Field(s)');
         $field->notes = __('(select one or more fields, required)');
         $field->class = 'uk-select';
-        $field->attr(['x-model' => 'fieldset.fields', 'required' => 'required']);
+        $field->attr(['x-model' => 'fieldset.fields']);
         $field->options = PromptAIHelper::getFieldOptions();
         $field->columnWidth = 50;
         $fieldset->add($field);
@@ -166,7 +175,7 @@ class PromptAIConfigForm {
         /** @var InputfieldText $field */
         $field = $fieldset->InputfieldText;
         $field->label = __('Target Subfield');
-        $field->notes = __('(only for file/image fields, default: description)');
+        $field->notes = __('(required for file/image fields)');
         $field->attr(['x-model' => 'fieldset.targetSubfield', 'placeholder' => 'description', 'x-show' => 'hasFileField(fieldset.fields)']);
         $field->columnWidth = 50;
         $fieldset->add($field);
@@ -186,7 +195,7 @@ class PromptAIConfigForm {
         $field = $fieldset->InputfieldTextarea;
         $field->label = __('Prompt');
         $field->notes = __('(required)');
-        $field->attr(['rows' => 4, 'x-model' => 'fieldset.prompt', 'required' => 'required']);
+        $field->attr(['rows' => 4, 'x-model' => 'fieldset.prompt']);
         $field->columnWidth = 100;
         $fieldset->add($field);
 
@@ -220,14 +229,69 @@ class PromptAIConfigForm {
         }
         $fileFieldIdsJson = json_encode($fileFieldIds);
 
+        $errorMessages = json_encode([
+            'label' => __('Label is required'),
+            'mode' => __('Mode must be selected'),
+            'fields' => __('At least one field must be selected'),
+            'targetSubfield' => __('Target subfield is required when file/image fields are selected'),
+            'prompt' => __('Prompt is required'),
+        ]);
+
         return "
         <script>
         function promptConfigForm() {
             return {
                 fieldsets: {$initialDataJson},
+                errors: [],
                 fileFieldIds: {$fileFieldIdsJson},
+                errorMessages: {$errorMessages},
                 init() {
+                    this.errors = this.fieldsets.map(() => ({}));
                     this.setupAsmSelectListener();
+                },
+                validateForm(event) {
+                    let isValid = true;
+
+                    this.fieldsets.forEach((fieldset, index) => {
+                        this.errors[index] = {};
+
+                        if (!fieldset.label || !fieldset.label.trim()) {
+                            this.errors[index].label = this.errorMessages.label;
+                            isValid = false;
+                        }
+
+                        if (!fieldset.mode || !['inline', 'page'].includes(fieldset.mode)) {
+                            this.errors[index].mode = this.errorMessages.mode;
+                            isValid = false;
+                        }
+
+                        const hasFields = fieldset.fields && Array.isArray(fieldset.fields) && fieldset.fields.length > 0;
+                        if (!hasFields) {
+                            this.errors[index].fields = this.errorMessages.fields;
+                            isValid = false;
+                        }
+
+                        if (this.hasFileField(fieldset.fields) && (!fieldset.targetSubfield || !fieldset.targetSubfield.trim())) {
+                            this.errors[index].targetSubfield = this.errorMessages.targetSubfield;
+                            isValid = false;
+                        }
+
+                        if (!fieldset.prompt || !fieldset.prompt.trim()) {
+                            this.errors[index].prompt = this.errorMessages.prompt;
+                            isValid = false;
+                        }
+                    });
+
+                    if (!isValid) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        this.\$nextTick(() => {
+                            const firstError = document.querySelector('.promptai-validation-errors:not([style*=\"display: none\"])');
+                            if (firstError) {
+                                firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }
+                        });
+                    }
                 },
                 setupListener() {
                     const self = this;
@@ -276,7 +340,8 @@ class PromptAIConfigForm {
                 },
                 addFieldset() {
                     this.fieldsets.push(JSON.parse('{$emptyFieldsetJson}'));
-                    
+                    this.errors.push({});
+
                     // Initialize new asmSelect fields and scroll after DOM update
                     setTimeout(() => {
                         const fieldsetsEls = document.querySelectorAll('.prompt-ai-config--item');
@@ -307,6 +372,7 @@ class PromptAIConfigForm {
                 },
                 removeFieldset(index) {
                     this.fieldsets.splice(index, 1);
+                    this.errors.splice(index, 1);
                 }
             }
         }

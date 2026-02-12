@@ -33,6 +33,26 @@
     padding-top: 20px;
 }
 
+/* Validation Error Styles */
+
+[x-cloak] {
+    display: none !important;
+}
+
+.promptai-validation-errors {
+    padding: 8px 16px;
+}
+
+.promptai-error-msg {
+    color: var(--error-inline-text-color);
+    font-size: 14px;
+    padding: 2px 0;
+}
+
+.promptai-error-msg .fa {
+    margin-right: 6px;
+}
+
 /* Inline Mode Styles - JavaScript-Injected Buttons */
 
 /* Loading state for fields being processed */
