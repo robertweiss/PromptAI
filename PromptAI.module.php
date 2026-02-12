@@ -113,7 +113,7 @@ class PromptAI extends Process implements Module {
      * resolve file if needed, and return a built UserMessage.
      */
     private function prepareInlineRequest(): UserMessage {
-        $content = wire('input')->post->text('content', ['maxLength' => 0]);
+        $content = wire('input')->post->purify('content');
         $promptText = wire('input')->post->text('prompt', ['maxLength' => 0]);
         $pageId = wire('input')->post->int('page_id');
         $repeaterItemId = wire('input')->post->int('repeater_item_id');
