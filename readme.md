@@ -50,14 +50,7 @@ Field: description (within repeater)
 
 ### Custom Subfield Support
 
-For image and file fields, configure which subfield the AI writes to:
-
-- `description` (default)
-- `alt_text`
-- `caption`
-- Any custom subfield defined on your file/image fields
-
-The "Target Subfield" option appears in the prompt configuration when file or image fields are selected. In inline mode, AI buttons appear next to all text subfield inputs automatically. See the [ProcessWire documentation on custom subfields](https://processwire.com/blog/posts/pw-3.0.142/) for more information.
+For image and file fields, the AI can write to any subfield. By default, the module writes to the `description` subfield. The "Target Subfield" option appears in the prompt configuration when file or image fields are selected. In inline mode, AI buttons appear next to all text subfield inputs automatically. See the [ProcessWire documentation on custom subfields](https://processwire.com/blog/posts/pw-3.0.142/) for more information.
 
 ### AI Tools (experimental)
 
@@ -80,7 +73,7 @@ Tools are disabled by default and must be explicitly enabled in module configura
 
 ### File & Image Fields
 - Pageimage(s) — any text subfield
-- Pagefile(s) — PDF, plain text, and other formats depending on the AI provider
+- Pagefile(s) — PDF, plain text, other formats might be possible depending on the AI provider
 
 ### Repeater Support
 - Repeater fields
@@ -91,10 +84,9 @@ Tools are disabled by default and must be explicitly enabled in module configura
 ## Installation
 
 1. Download and place in `/site/modules/PromptAI/`.
-2. Run `composer install` inside the module directory to install dependencies.
-3. Activate the module in the ProcessWire admin.
-4. Configure your API key and provider in Modules > Site > PromptAI.
-5. Set up your prompts at Setup > Prompt AI.
+2. Activate the module in the ProcessWire admin.
+3. Configure your API key and provider in Modules > Site > PromptAI.
+4. Set up your prompts at Setup > Prompt AI.
 
 ## Configuration
 
@@ -106,8 +98,8 @@ Configure in Modules > Site > PromptAI:
 - **AI Model** (required): The model to use (see provider documentation for available models)
 - **API Key** (required): Your API key for the selected provider
 - **System Prompt** (optional): A general instruction sent to the AI with every request
-- **Individual Prompt Buttons** (optional): Show separate buttons per prompt instead of one combined button
-- **Enable AI Tools** (optional): Allow the AI to call ProcessWire API tools for data retrieval
+- **Individual Prompt Buttons** (optional): Show separate buttons per prompt instead of one combined button when using page mode
+- **Enable AI Tools** (optional, experimental): Allow the AI to call ProcessWire API tools for data retrieval
 - **Test Settings**: Send a test request to verify your configuration
 
 ### Prompt Configuration
@@ -116,7 +108,7 @@ Navigate to **Setup > Prompt AI** to configure prompts:
 
 Each prompt consists of:
 
-- **Label**: Optional identifier for the button and configuration overview
+- **Label**: Identifier for the button and configuration overview
 - **Mode**: Page Mode (process on save) or Inline Mode (process on-demand)
 - **Template(s)**: Which templates this prompt applies to. Leave empty for all templates. Select repeater templates (labeled "Repeater: fieldname") to process repeater fields.
 - **Field(s)**: The field(s) to process
@@ -139,13 +131,13 @@ Per-prompt setting that controls how existing content is handled:
 - **Disabled (default)**: Only writes to empty fields, preserving existing content
 - **Enabled**: Always overwrites existing content
 
-This setting only applies in page mode. In inline mode, responses always replace the field content, but the page is not automatically saved.
+This setting only applies in page mode. In inline mode, responses always replace the field content, but the page is not automatically saved after processing.
 
 > **Note:**
 > - Text fields: Field content is sent to AI with the prompt. The result replaces the field content.
 > - Image & file fields: Each file/image is sent individually. Results are written to the configured Target Subfield.
 > - Repeater items are processed individually with the same prompt.
-> - There is a 5-second throttle between AI requests to prevent abuse.
+> - There is a 5-second throttle between AI requests to prevent accidental multi-processing.
 
 ## Configuration Examples
 
@@ -159,7 +151,7 @@ This setting only applies in page mode. In inline mode, responses always replace
 **Image descriptions:**
 - Template: `basic-page` | Field: `images`
 - Prompt: `Create a short alt-text for this image`
-- Result: Each image is analyzed, result saved to the image's description subfield
+- Result: Each image is analyzed, result saved to the image's description
 
 **Multiple fields:**
 - Template: `blog-post` | Fields: `headline`, `summary`
@@ -192,7 +184,7 @@ This setting only applies in page mode. In inline mode, responses always replace
 
 By default, placeholders work with simple field types (text, numbers, booleans). For complex field types like PageArray (page references), extend the system using the hookable `PromptAI::fieldValueToString` method.
 
-Add this to your `/site/ready.php`:
+Add this (or your custom solution) to your `/site/ready.php`:
 
 ```php
 <?php namespace ProcessWire;
@@ -230,4 +222,4 @@ ddev php site/modules/PromptAI/tests/vendor/bin/pest --configuration=site/module
 ## Requirements
 
 - ProcessWire >= 3.0.184
-- PHP >= 8.2
+- PHP >= 8.3

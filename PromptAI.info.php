@@ -2,12 +2,13 @@
 
 $info = [
     'title' => 'PromptAI',
-    'summary' => 'Send a prompt and the content of a text field to an AI and save the result into a(nother) text field.',
-    'version' => 21,
+    'summary' => 'Multi-provider AI integration (Anthropic, OpenAI, Gemini, DeepSeek) for processing text and file fields via configurable prompts.',
+    'version' => 22,
     'author' => 'Robert Weiss',
     'icon' => 'magic',
     'requires' => [
         'ProcessWire>=3.0.184',
+        'PHP>=8.3.0',
     ],
     'href' => 'https://github.com/robertweiss/PromptAI',
     'singular' => true,
