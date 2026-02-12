@@ -615,7 +615,8 @@
             // Exclude system fields (sort, delete, hidden, checkbox)
             const subFieldInputs = fileField.querySelectorAll(
                 '.InputfieldFileData input[type="text"], .InputfieldFileData textarea, ' +
-                '.InputfieldImageEdit input[type="text"], .InputfieldImageEdit textarea'
+                '.InputfieldImageEdit input[type="text"], .InputfieldImageEdit textarea, ' +
+                '.InputfieldImageEdit__core input[type="text"], .InputfieldImageEdit__core textarea'
             );
 
             subFieldInputs.forEach(function(input) {
@@ -623,6 +624,9 @@
                 if (input.type === 'hidden' || input.type === 'checkbox' ||
                     input.name.startsWith('sort_') || input.name.startsWith('delete_') ||
                     input.name.startsWith('rename_')) return;
+
+                // Skip textareas that TinyMCE has hidden (the visible editor gets the button instead)
+                if (input.tagName === 'TEXTAREA' && input.classList.contains('InputfieldTinyMCEEditor') && input.style.display === 'none') return;
 
                 // Only show prompts that target this specific subfield
                 var subfield = extractSubfieldName(input.name);
@@ -634,7 +638,20 @@
                 });
 
                 if (matchingIndices.length === 0) return;
-                createButtonForInput(input, matchingIndices);
+
+                // For TinyMCE fields, attach button to the visible editor wrapper instead
+                var target = input;
+                if (input.tagName === 'TEXTAREA' && input.classList.contains('InputfieldTinyMCEEditor')) {
+                    var editorWrapper = input.parentNode.querySelector('.mce-tinymce, .tox-tinymce');
+                    if (editorWrapper) {
+                        target = editorWrapper;
+                    } else {
+                        // Editor not yet initialized, skip (MutationObserver will retry)
+                        return;
+                    }
+                }
+
+                createButtonForInput(target, matchingIndices);
             });
         });
     }
