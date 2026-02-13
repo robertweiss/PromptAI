@@ -88,6 +88,14 @@ Tools are disabled by default and must be explicitly enabled in module configura
 3. Configure your API key and provider in Modules > Site > PromptAI.
 4. Set up your prompts at Setup > Prompt AI.
 
+## Permissions
+
+This module installs the following permissions:
+- promptai: Allows to use predefined prompts
+- promptai-config: Allows to configure prompts
+
+Superusers have all permissions by default.
+
 ## Configuration
 
 ### Basic Settings

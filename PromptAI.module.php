@@ -37,6 +37,11 @@ class PromptAI extends Process implements Module {
             return $this->executeInlineProcess();
         }
 
+        // Config page requires promptai-config permission
+        if ($this->permissions()->get('promptai-config')->id && !$this->user->hasPermission('promptai-config')) {
+            throw new WirePermissionException();
+        }
+
         $configForm = new PromptAIConfigForm();
 
         // Handle form submission
@@ -261,6 +266,11 @@ class PromptAI extends Process implements Module {
     }
 
     public function init() {
+        $this->addHookAfter('Page::viewable', $this, 'hookConfigPageViewable');
+
+        if ($this->permissions()->get('promptai')->id && !$this->user->hasPermission('promptai')) {
+            return;
+        }
         if ($this->initSettings()) {
             // Initialize both handlers since mode is per-prompt
             $inlineHandler = new PromptAIInlineMode($this);
@@ -271,6 +281,20 @@ class PromptAI extends Process implements Module {
         }
 
         parent::init();
+    }
+
+    public function hookConfigPageViewable(HookEvent $event) {
+        $page = $event->object;
+        if ($page->name !== 'prompt-ai' || $page->template->name !== 'admin') return;
+
+        if ($this->user->hasPermission('promptai-config')) {
+            $event->return = true;
+            return;
+        }
+
+        // Allow inline endpoint access for promptai users,
+        // but hide from nav (no action param during nav building)
+        $event->return = !empty($_GET['action']) && $this->user->hasPermission('promptai');
     }
 
     public function initSettings(): bool {

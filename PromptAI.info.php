@@ -3,7 +3,7 @@
 $info = [
     'title' => 'PromptAI',
     'summary' => 'Multi-provider AI integration (Anthropic, OpenAI, Gemini, DeepSeek) for processing text and file fields via configurable prompts.',
-    'version' => 23,
+    'version' => 240,
     'author' => 'Robert Weiss',
     'icon' => 'magic',
     'requires' => [
@@ -13,9 +13,14 @@ $info = [
     'href' => 'https://github.com/robertweiss/PromptAI',
     'singular' => true,
     'autoload' => 'template=admin',
+    'permission' => 'promptai',
+    'permissions' => array(
+		'promptai-config' => __('Show PromptAI configuration'),
+		'promptai' => __('Show PromptAI buttons on page edit screen')
+	),
     'page' => [
         'parent' => 'setup',
         'name' => 'prompt-ai',
-        'title' => 'Prompt AI',
+        'title' => __('Prompt AI'),
     ],
 ];
