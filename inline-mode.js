@@ -474,78 +474,49 @@
     /**
      * Create button container with dropdown for an input element
      */
-    function createButtonForInput(input, indices) {
+    function createPromptsForInput(input, indices) {
         // Skip if already has button container
-        if (input.nextElementSibling && input.nextElementSibling.classList.contains('promptai-button-container')) return;
+        if (input.nextElementSibling && input.nextElementSibling.classList.contains('promptai-container')) return;
 
         // Create container for button and dropdown
         const container = document.createElement('div');
-        container.className = 'promptai-button-container';
+        container.className = 'promptai-container';
 
-        // Create button
-        const button = document.createElement('button');
-        button.type = 'button';
-        button.className = 'promptai-magic-btn';
-        button.innerHTML = '<i class="fa fa-magic"></i>';
-        button.title = 'AI Process';
+        const icon = document.createElement('i');
+        icon.className = 'fa fa-magic promptai-icon';
+        container.appendChild(icon);
 
-        // Create dropdown
-        const dropdown = document.createElement('div');
-        dropdown.className = 'promptai-dropdown promptai-dropdown-hidden';
-
-        const ul = document.createElement('ul');
         indices.forEach(function(promptIndex) {
             const prompt = config.prompts[promptIndex];
             if (!prompt) return;
 
-            const li = document.createElement('li');
-            li.textContent = prompt.label;
-            li.dataset.promptIndex = promptIndex;
-            ul.appendChild(li);
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'promptai-button uk-link';
+            button.textContent = prompt.label;
+            button.dataset.promptIndex = promptIndex;
+            container.appendChild(button);
         });
-        dropdown.appendChild(ul);
 
-        // Add button and dropdown to container
-        container.appendChild(button);
-        container.appendChild(dropdown);
+        const loading = document.createElement('div');
+        loading.className = 'promptai-loading';
+        const icon2 = document.createElement('i');
+        icon2.className = 'fa fa-magic promptai-loading-icon';
+        loading.appendChild(icon2);
+        container.appendChild(loading);
 
         // Insert container after the input
         input.parentNode.insertBefore(container, input.nextSibling);
 
-        // Button click handler
-        button.addEventListener('click', function(e) {
-            e.preventDefault();
-            e.stopPropagation();
-
-            // Close other dropdowns
-            document.querySelectorAll('.promptai-dropdown').forEach(d => {
-                if (d !== dropdown) {
-                    d.classList.add('promptai-dropdown-hidden');
-                    d.classList.remove('is-visible');
-                }
-            });
-
-            // Toggle this dropdown
-            const isHidden = dropdown.classList.toggle('promptai-dropdown-hidden');
-            if (isHidden) {
-                dropdown.classList.remove('is-visible');
-            } else {
-                dropdown.classList.add('is-visible');
-            }
-        });
-
         // Dropdown item click handler
-        dropdown.addEventListener('click', function(e) {
-            const li = e.target.closest('li');
-            if (!li || !li.dataset.promptIndex) return;
+        container.addEventListener('click', function(e) {
+            const button = e.target.closest('button');
+            if (!button || !button.dataset.promptIndex) return;
 
-            const promptIndex = li.dataset.promptIndex;
+            const promptIndex = button.dataset.promptIndex;
             const prompt = config.prompts[promptIndex];
 
             if (!prompt) return;
-
-            dropdown.classList.add('promptai-dropdown-hidden');
-            dropdown.classList.remove('is-visible');
 
             // Find the parent Inputfield
             const inputfield = input.closest('.Inputfield');
@@ -590,10 +561,10 @@
             if (!input) return;
 
             // Check if button already exists
-            const existingContainer = input.parentNode.querySelector('.promptai-button-container');
+            const existingContainer = input.parentNode.querySelector('.promptai-container');
             if (existingContainer) return;
 
-            createButtonForInput(input, indices);
+            createPromptsForInput(input, indices);
         });
     }
 
@@ -651,7 +622,7 @@
                     }
                 }
 
-                createButtonForInput(target, matchingIndices);
+                createPromptsForInput(target, matchingIndices);
             });
         });
     }

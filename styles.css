@@ -1,3 +1,4 @@
+/** PromptAI Config Styles */
 .InputfieldHeaderHidden>.InputfieldContent, .InputfieldHeaderHidden+.InputfieldContent {
     padding-top: 0;
 }
@@ -57,115 +58,48 @@
 
 /* Loading state for fields being processed */
 .Inputfield.promptai-processing .InputfieldContent {
+    position: relative;
+    pointer-events: none;
     opacity: 0.6;
-    pointer-events: none;
-    position: relative;
 }
 
-.Inputfield.promptai-processing .InputfieldContent::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(255, 255, 255, 0.5);
-    z-index: 10;
-}
-
-/* Spinner animation for button during processing */
-.Inputfield.promptai-processing .promptai-magic-btn .fa-spinner {
-    animation: fa-spin 1s infinite linear;
-}
-
-@keyframes fa-spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-
-/* Button and Dropdown Styles - Used for Both Text and File Fields */
-
-/* Container for button and dropdown */
-.promptai-button-container {
-    position: relative;
-    display: inline-block;
-    margin-top: 1rem;
-    margin-right: 8px;
-}
-
-/* Magic wand button for file description inputs */
-.promptai-magic-btn {
-    position: relative;
-    top: -2px;
-    background: var(--button-color);
-    border: var(--button-border);
-    border-radius: 3px;
-    padding: 6px 8px 3px;
-    cursor: pointer;
-    color: var(--button-background);
-    font-size: 14px;
-    transition: all 0.2s ease;
-    line-height: 1;
-}
-
-.promptai-magic-btn:hover {
-    background: var(--button-hover-background);
-    color: var(--button-hover-color);
-    border-color: var(--button-hover-border);
-}
-
-.promptai-magic-btn .fa {
-    pointer-events: none;
-}
-
-/* Dropdown menu for prompts */
-.promptai-dropdown {
-    position: absolute;
-    left: 0;
-    top: 100%;
-    margin-top: 2px;
-    background: var(--blocks-background, white);
-    border: 1px solid var(--border-color);
-    border-radius: 3px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    min-width: 200px;
-    z-index: 1000;
-}
-
-.promptai-dropdown-hidden {
+.promptai-loading {
     display: none;
 }
 
-.promptai-dropdown ul {
-    list-style: none;
-    margin: 0;
-    padding: 5px 0;
+.Inputfield.promptai-processing .promptai-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: absolute;
+    inset: 0;
+    background: var(--main-color);
+    opacity: 0.35;
+    z-index: 10;
 }
 
-.promptai-dropdown li {
-    padding: 8px 15px;
-    cursor: pointer;
-    transition: background 0.2s ease;
-    white-space: nowrap;
+.promptai-loading-icon {
+    font-size: 3rem !important;
+    color: var(--main-background);
 }
 
-.promptai-dropdown li:hover {
-    color: var(--button-hover-color);
-    background: var(--button-hover-background);
+
+/* Button and Dropdown Styles - Used for Both Text and File Fields */
+.promptai-container {
+    margin-top: 0.5rem;
+    margin-right: 8px;
+    display: inline-flex;
+    gap: 0.25rem;
+    align-items: center;
 }
 
-.InputfieldImageList:has(.promptai-dropdown.is-visible),
-.Inputfields:has(.promptai-dropdown.is-visible) {
-    .Inputfield,
-    .ImageOuter {
-        position: relative;
-        z-index: 1;
-    }
-}
-
-.Inputfields .Inputfield:has(.promptai-dropdown.is-visible),
-.InputfieldImageList .InputfieldImageEdit:has(.promptai-dropdown.is-visible),
-.InputfieldImageList .ImageOuter:has(.promptai-dropdown.is-visible) {
+.promptai-icon {
     position: relative;
-    z-index: 2;
+    color: var(--muted-color);
+}
+
+.promptai-button {
+    font-size: .875rem;
+    border: none;
+    background-color: transparent;
 }
