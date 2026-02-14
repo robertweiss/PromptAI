@@ -492,7 +492,7 @@
 
             const button = document.createElement('button');
             button.type = 'button';
-            button.className = 'promptai-button uk-link';
+            button.className = 'promptai-button uk-button uk-button-small uk-button-text uk-margin-small-right';
             button.textContent = prompt.label;
             button.dataset.promptIndex = promptIndex;
             container.appendChild(button);
