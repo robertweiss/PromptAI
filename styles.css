@@ -83,8 +83,7 @@
     color: var(--main-background);
 }
 
-
-/* Button and Dropdown Styles - Used for Both Text and File Fields */
+/* Button Styles - Used for Both Text and File Fields */
 .promptai-container {
     margin-top: 0.5rem;
     margin-right: 8px;

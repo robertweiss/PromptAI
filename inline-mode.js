@@ -472,13 +472,13 @@
     }
 
     /**
-     * Create button container with dropdown for an input element
+     * Create button container for an input element
      */
     function createPromptsForInput(input, indices) {
         // Skip if already has button container
         if (input.nextElementSibling && input.nextElementSibling.classList.contains('promptai-container')) return;
 
-        // Create container for button and dropdown
+        // Create container for button(s)
         const container = document.createElement('div');
         container.className = 'promptai-container';
 
@@ -508,7 +508,7 @@
         // Insert container after the input
         input.parentNode.insertBefore(container, input.nextSibling);
 
-        // Dropdown item click handler
+        // Button click handler
         container.addEventListener('click', function(e) {
             const button = e.target.closest('button');
             if (!button || !button.dataset.promptIndex) return;
@@ -628,20 +628,6 @@
     }
 
     /**
-     * Close dropdowns when clicking outside
-     */
-    function setupGlobalClickHandler() {
-        document.addEventListener('click', function(e) {
-            if (!e.target.closest('.promptai-magic-btn') && !e.target.closest('.promptai-dropdown')) {
-                document.querySelectorAll('.promptai-dropdown').forEach(d => {
-                    d.classList.add('promptai-dropdown-hidden');
-                    d.classList.remove('is-visible');
-                });
-            }
-        });
-    }
-
-    /**
      * Initialize event listeners
      */
     function init() {
@@ -658,9 +644,6 @@
 
         // Add buttons to file field description inputs
         addButtonsToFileFields();
-
-        // Setup global click handler to close dropdowns
-        setupGlobalClickHandler();
 
         // Re-add buttons when fields are added dynamically (e.g., new file uploaded, repeater added)
         const observer = new MutationObserver(function(mutations) {
