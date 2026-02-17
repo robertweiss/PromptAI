@@ -98,9 +98,15 @@ class PromptAIConfigForm {
         $configurationLabel = __('Prompt Configuration');
         $untitledLabel = __('Untitled');
         $removeLabel = __('Remove');
+        $duplicateLabel = __('Duplicate');
+        $moveUpLabel = __('Move Up');
+        $moveDownLabel = __('Move Down');
         $headerHtml = '
             <div class="prompt-ai-config--item-header InputfieldHeader">
                 <span class="prompt-ai-config--item-controls">
+                    <i class="fa fa-arrow-up btn-move" x-on:click="moveFieldsetUp(index)" x-bind:class="{ \'disabled\': index === 0 }" title="'.$moveUpLabel.'"></i>
+                    <i class="fa fa-arrow-down btn-move" x-on:click="moveFieldsetDown(index)" x-bind:class="{ \'disabled\': index === fieldsets.length - 1 }" title="'.$moveDownLabel.'"></i>
+                    <i class="fa fa-copy btn-duplicate" x-on:click="duplicateFieldset(index)" title="'.$duplicateLabel.'"></i>
                     <i class="fa fa-trash btn-remove" x-on:click="removeFieldset(index)" title="'.$removeLabel.'"></i>
                 </span>
                 <span class="prompt-ai-config--item-label" x-text="`'.$configurationLabel.' ${index + 1}: ${fieldset.label || &quot;'.$untitledLabel.'&quot;}`">
@@ -177,8 +183,7 @@ class PromptAIConfigForm {
         $field->label = __('Overwrite field content');
         $field->notes = __('When unchecked, only processes empty fields.');
         $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
-        $field->wrapAttr('x-show', "fieldset.mode !== 'inline'");
-        $field->wrapAttr('x-bind:style', "optionWidth(fieldset, 'overwrite')");
+        $field->wrapAttr('x-bind:style', "fieldset.mode !== 'inline' ? optionWidth(fieldset, 'overwrite') : 'display:none'");
         $fieldset->add($field);
 
         // Ignore field content
@@ -357,37 +362,55 @@ class PromptAIConfigForm {
                     if (count === 2) return 'width: 50%';
                     return which === 'overwrite' ? 'width: 34%' : 'width: 33%';
                 },
-                addFieldset() {
-                    this.fieldsets.push(JSON.parse('{$emptyFieldsetJson}'));
-                    this.errors.push({});
-
-                    // Initialize new asmSelect fields and scroll after DOM update
+                initNewFieldset(targetIndex) {
                     setTimeout(() => {
                         const fieldsetsEls = document.querySelectorAll('.prompt-ai-config--item');
-                        const lastFieldsetEl = fieldsetsEls[fieldsetsEls.length - 1];
-                        
-                        if (lastFieldsetEl) {
-                            // Initialize any new InputfieldAsmSelect elements in the new fieldset
-                            const newAsmSelects = lastFieldsetEl.querySelectorAll('.InputfieldAsmSelect select[multiple]');
+                        const targetEl = fieldsetsEls[targetIndex];
+
+                        if (targetEl) {
+                            const newAsmSelects = targetEl.querySelectorAll('.InputfieldAsmSelect select[multiple]');
                             newAsmSelects.forEach(select => {
                                 if (typeof initInputfieldAsmSelect === 'function') {
-                                    // ProcessWire's initInputfieldAsmSelect expects a jQuery object
                                     initInputfieldAsmSelect($(select));
                                 }
                             });
-                            
-                            // Refresh the global event listeners to include new elements
-                            setTimeout(() => {
-                                this.setupListener();
-                            }, 50);
-                            
-                            // Scroll to the new fieldset
-                            lastFieldsetEl.scrollIntoView({ 
-                                behavior: 'smooth', 
-                                block: 'center' 
+
+                            setTimeout(() => this.setupListener(), 50);
+
+                            targetEl.scrollIntoView({
+                                behavior: 'smooth',
+                                block: 'center'
                             });
                         }
                     }, 100);
+                },
+                addFieldset() {
+                    this.fieldsets.push(JSON.parse('{$emptyFieldsetJson}'));
+                    this.errors.push({});
+                    this.initNewFieldset(this.fieldsets.length - 1);
+                },
+                duplicateFieldset(index) {
+                    const clone = JSON.parse(JSON.stringify(this.fieldsets[index]));
+                    clone.label = (clone.label || '') + ' (Copy)';
+                    this.fieldsets.push(clone);
+                    this.errors.push({});
+                    this.initNewFieldset(this.fieldsets.length - 1);
+                },
+                moveFieldsetUp(index) {
+                    if (index <= 0) return;
+                    const item = this.fieldsets.splice(index, 1)[0];
+                    this.fieldsets.splice(index - 1, 0, item);
+                    const err = this.errors.splice(index, 1)[0];
+                    this.errors.splice(index - 1, 0, err);
+                    this.\$nextTick(() => setTimeout(() => this.setupListener(), 50));
+                },
+                moveFieldsetDown(index) {
+                    if (index >= this.fieldsets.length - 1) return;
+                    const item = this.fieldsets.splice(index, 1)[0];
+                    this.fieldsets.splice(index + 1, 0, item);
+                    const err = this.errors.splice(index, 1)[0];
+                    this.errors.splice(index + 1, 0, err);
+                    this.\$nextTick(() => setTimeout(() => this.setupListener(), 50));
                 },
                 removeFieldset(index) {
                     this.fieldsets.splice(index, 1);

@@ -25,8 +25,21 @@
     margin-bottom: 20px;
 }
 
-.btn-remove {
+.btn-remove,
+.btn-duplicate,
+.btn-move {
     cursor: pointer;
+    margin-right: 8px;
+}
+
+.btn-remove {
+    margin-right: 0;
+}
+
+.btn-move.disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    pointer-events: none;
 }
 
 .prompt-ai-config--item-controls {
