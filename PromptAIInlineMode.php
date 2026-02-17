@@ -96,6 +96,7 @@ class PromptAIInlineMode extends Wire {
                 'label' => $promptEntity->label ?: __('Untitled Prompt'),
                 'prompt' => $promptEntity->prompt,
                 'targetSubfield' => $promptEntity->targetSubfield ?? 'description',
+                'ignoreFieldContent' => $promptEntity->ignoreFieldContent ?? false,
             ];
         }
 

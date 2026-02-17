@@ -9,6 +9,7 @@ class PromptMatrixEntity {
         public ?string $label = null,
         public ?bool $overwriteTarget = false,
         public ?string $targetSubfield = 'description',
+        public ?bool $ignoreFieldContent = false,
     ) {}
 
     public static function fromArray(array $config): self {
@@ -22,6 +23,7 @@ class PromptMatrixEntity {
             label: $config['label'] ?? null,
             overwriteTarget: $config['overwriteTarget'] ?? false,
             targetSubfield: $targetSubfield ?: 'description',
+            ignoreFieldContent: $config['ignoreFieldContent'] ?? false,
         );
     }
 
@@ -34,6 +36,7 @@ class PromptMatrixEntity {
             'label' => $this->label ?? '',
             'overwriteTarget' => $this->overwriteTarget ?? false,
             'targetSubfield' => $this->targetSubfield ?? 'description',
+            'ignoreFieldContent' => $this->ignoreFieldContent ?? false,
         ];
     }
 }

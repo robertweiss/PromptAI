@@ -200,6 +200,7 @@ class PromptAIPageMode extends Wire {
      */
     private function processTextField(Field $field, Page $page, PromptMatrixEntity $promptMatrixEntity): void {
         $value = $page->get($field->name);
+        $ignoreFieldContent = $promptMatrixEntity->ignoreFieldContent ?? false;
 
         // Check overwriteTarget: if false, only process empty fields
         if (!$promptMatrixEntity->overwriteTarget && (string)$value) {
@@ -208,8 +209,8 @@ class PromptAIPageMode extends Wire {
             return; // Field has content and overwrite is disabled
         }
 
-        // For empty fields, there's nothing to process
-        if (!$value) {
+        // For empty fields with no ignoreFieldContent, there's nothing to process
+        if (!$value && !$ignoreFieldContent) {
             return;
         }
 
@@ -217,10 +218,11 @@ class PromptAIPageMode extends Wire {
         $context = PromptAIHelper::getRepeaterContext($page);
 
         // Combine prompt with field content (with placeholder substitution)
+        $contentForPrompt = $ignoreFieldContent ? '' : $value;
         $finalPrompt = PromptAIHelper::substituteAndPreparePrompt(
             $promptMatrixEntity->prompt,
             $context['parentPage'],
-            $value,
+            $contentForPrompt,
             $context['repeaterItem']
         );
         $result = $this->module->chat($finalPrompt);

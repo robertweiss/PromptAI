@@ -26,7 +26,7 @@ class PromptAIConfigForm {
         $out .= '<h2>'.__('Prompt Configuration').'</h2>';
         $out .= '<p>'.__('Configure AI prompts for your fields. Each prompt can work in two modes:').'</p>';
         $out .= '<ul>';
-        $out .= '<li><strong>'.__('Inline Mode').':</strong> '.__('Magic wand button appears next to field(s) for instant AI processing').'</li>';
+        $out .= '<li><strong>'.__('Inline Mode').':</strong> '.__('Prompt buttons appear below field(s) for instant AI processing').'</li>';
         $out .= '<li><strong>'.__('Page Mode').':</strong> '.__('Processes field(s) when clicking "Save + Send to AI" button').'</li>';
         $out .= '</ul>';
 
@@ -171,23 +171,32 @@ class PromptAIConfigForm {
         $field->columnWidth = 50;
         $fieldset->add($field);
 
+        // Overwrite Target (page mode only)
+        /** @var InputfieldCheckbox $field */
+        $field = $fieldset->InputfieldCheckbox;
+        $field->label = __('Overwrite field content');
+        $field->notes = __('When unchecked, only processes empty fields.');
+        $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
+        $field->wrapAttr('x-show', "fieldset.mode !== 'inline'");
+        $field->wrapAttr('x-bind:style', "optionWidth(fieldset, 'overwrite')");
+        $fieldset->add($field);
+
+        // Ignore field content
+        /** @var InputfieldCheckbox $field */
+        $field = $fieldset->InputfieldCheckbox;
+        $field->label = __('Ignore field content');
+        $field->notes = __('Send only the prompt, without the current text of the field. Files/images are still sent.');
+        $field->attr(['x-model' => 'fieldset.ignoreFieldContent', 'value' => 0]);
+        $field->wrapAttr('x-bind:style', "optionWidth(fieldset, 'ignore')");
+        $fieldset->add($field);
+
         // Target Subfield (file/image fields only)
         /** @var InputfieldText $field */
         $field = $fieldset->InputfieldText;
         $field->label = __('Target Subfield');
         $field->notes = __('(required for file/image fields)');
-        $field->attr(['x-model' => 'fieldset.targetSubfield', 'placeholder' => 'description', 'x-show' => 'hasFileField(fieldset.fields)']);
-        $field->columnWidth = 50;
-        $fieldset->add($field);
-
-        // Overwrite Target (page mode only)
-        /** @var InputfieldCheckbox $field */
-        $field = $fieldset->InputfieldCheckbox;
-        $field->label = __('Overwrite field content (Page Mode only)');
-        $field->description = '';
-        $field->notes = __('When unchecked, only processes empty fields. In Inline Mode, fields are always overwritten.');
-        $field->attr(['x-model' => 'fieldset.overwriteTarget', 'value' => 0]);
-        $field->columnWidth = 50;
+        $field->attr(['x-model' => 'fieldset.targetSubfield', 'placeholder' => 'description']);
+        $field->wrapAttr('x-bind:style', "hasFileField(fieldset.fields) ? optionWidth(fieldset, 'subfield') : 'display:none'");
         $fieldset->add($field);
 
         // Prompt textarea
@@ -338,6 +347,16 @@ class PromptAIConfigForm {
                     if (!fields || !Array.isArray(fields)) return false;
                     return fields.some(id => this.fileFieldIds.includes(String(id)));
                 },
+                optionWidth(fieldset, which) {
+                    const isPageMode = fieldset.mode !== 'inline';
+                    const hasFile = this.hasFileField(fieldset.fields);
+                    let count = 1; // ignoreFieldContent is always visible
+                    if (isPageMode) count++;
+                    if (hasFile) count++;
+                    if (count === 1) return 'width: 100%';
+                    if (count === 2) return 'width: 50%';
+                    return which === 'overwrite' ? 'width: 34%' : 'width: 33%';
+                },
                 addFieldset() {
                     this.fieldsets.push(JSON.parse('{$emptyFieldsetJson}'));
                     this.errors.push({});
@@ -440,6 +459,7 @@ class PromptAIConfigForm {
                 'label' => $config['label'] ?? '',
                 'overwriteTarget' => $config['overwriteTarget'] ?? false,
                 'targetSubfield' => $config['targetSubfield'] ?? 'description',
+                'ignoreFieldContent' => $config['ignoreFieldContent'] ?? false,
             ])->toArray();
         }
 

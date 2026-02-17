@@ -1,3 +1,7 @@
+:root {
+    --button-hover-background: var(--main-color);
+}
+
 /** PromptAI Config Styles */
 .InputfieldHeaderHidden>.InputfieldContent, .InputfieldHeaderHidden+.InputfieldContent {
     padding-top: 0;

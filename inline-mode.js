@@ -203,6 +203,11 @@
             }
         }
 
+        // If ignoreFieldContent is set, send empty content
+        if (prompt.ignoreFieldContent) {
+            content = '';
+        }
+
         const requestData = {
             content: content,
             prompt: prompt.prompt,
