@@ -186,6 +186,46 @@ namespace ProcessWire {
         }
     }
 
+    if (!class_exists('ProcessWire\MockModulesService')) {
+        class MockModulesService {
+            private array $modules = [];
+
+            public function register(string $name, $module): void {
+                $this->modules[$name] = $module;
+            }
+
+            public function get(string $name) {
+                return $this->modules[$name] ?? null;
+            }
+
+            public function getConfig(string $name): array {
+                return [];
+            }
+
+            public function saveConfig(string $name, array $config): bool {
+                return true;
+            }
+        }
+    }
+
+    if (!class_exists('ProcessWire\MockPromptAIModule')) {
+        class MockPromptAIModule {
+            public array $warnings = [];
+
+            public function warning(string $msg): void {
+                $this->warnings[] = $msg;
+            }
+
+            public function fieldValueToString($value, $fieldtype): string {
+                return (string) $value;
+            }
+
+            public function get($name) {
+                return null;
+            }
+        }
+    }
+
     if (!class_exists('ProcessWire\HookEvent')) {
         class HookEvent {
             public $object;
