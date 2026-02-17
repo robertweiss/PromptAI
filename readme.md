@@ -125,6 +125,8 @@ Each prompt consists of:
 - **Ignore Field Content**: Send only the prompt without the field's current text content. Useful for prompts that generate content from placeholders alone. Files and images are still sent.
 - **Prompt**: Instructions for the AI, with optional `{page.fieldname}` / `{item.fieldname}` placeholders
 
+Each prompt can be duplicated, reordered (move up/down), or removed using the icons in the prompt header.
+
 ### Button Modes
 
 **Single Button (default):**
