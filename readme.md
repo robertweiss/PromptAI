@@ -16,7 +16,7 @@ Choose from four AI providers:
 ### Two Processing Modes
 
 - **Page Mode**: Add a "Save + Send to AI" button to the page editor. All configured prompts run on save.
-- **Inline Mode**: AI buttons appear directly next to individual fields. Process fields on-demand without saving the page.
+- **Inline Mode**: AI buttons appear directly below individual fields. Process fields on-demand without saving the page.
 
 Both modes can be mixed freely in the same configuration.
 
@@ -122,6 +122,7 @@ Each prompt consists of:
 - **Field(s)**: The field(s) to process
 - **Target Subfield**: For file/image fields — which subfield to write results to (default: `description`)
 - **Overwrite Field Content**: Whether AI responses overwrite existing content (page mode only, disabled by default)
+- **Ignore Field Content**: Send only the prompt without the field's current text content. Useful for prompts that generate content from placeholders alone. Files and images are still sent.
 - **Prompt**: Instructions for the AI, with optional `{page.fieldname}` / `{item.fieldname}` placeholders
 
 ### Button Modes
