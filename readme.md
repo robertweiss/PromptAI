@@ -81,6 +81,9 @@ Tools are disabled by default and must be explicitly enabled in module configura
 - All supported field types work within repeaters
 - Each repeater item is processed individually
 
+### RockPageBuilder Support
+- All text, file and image field types work within [RockPageBuilder](https://www.baumrock.com/en/processwire/modules/rockpagebuilder/) blocks
+
 ## Installation
 
 1. Download and place in `/site/modules/PromptAI/`.
