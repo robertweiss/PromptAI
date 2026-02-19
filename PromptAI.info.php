@@ -3,9 +3,9 @@
 $info = [
     'title' => 'PromptAI',
     'summary' => 'Multi-provider AI integration (Anthropic, OpenAI, Gemini, DeepSeek) for processing text and file fields via configurable prompts.',
-    'version' => 260,
+    'version' => 270,
     'author' => 'Robert Weiss',
-    'icon' => 'magic',
+    'icon' => 'connectdevelop',
     'requires' => [
         'ProcessWire>=3.0.184',
         'PHP>=8.3.0',

@@ -125,11 +125,23 @@ class PromptAIHelper {
                     continue;
                 }
 
+                // Exclude RPB system datapage (not a block template)
+                if ($template->name === 'rockpagebuilder_datapage') {
+                    continue;
+                }
+
                 $label = $template->label ? $template->label.' ('.$template->name.')' : $template->name;
                 if (str_starts_with($template->name, 'repeater_')) {
                     $name = str_replace('repeater_', '', $template->name);
                     $label = 'Repeater: '.$name;
                 }
+
+                // Label RPB block templates clearly
+                if (str_starts_with($template->name, 'rockpagebuilderblock-')) {
+                    $blockName = str_replace('rockpagebuilderblock-', '', $template->name);
+                    $label = 'RPB Block: ' . ucfirst($blockName);
+                }
+
                 $templatesOptions[$template->id] = $label;
             }
         }
@@ -178,15 +190,37 @@ class PromptAIHelper {
                 continue;
             }
 
-            // Handle repeater templates
+            // Handle repeater templates and RPB block templates
             if (is_array($promptMatrixEntity->templates)) {
                 foreach ($promptMatrixEntity->templates as $templateId) {
                     $entityTemplate = wire('templates')->get($templateId);
-                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'repeater_')) {
+                    if (!$entityTemplate) continue;
+
+                    if (str_starts_with($entityTemplate->name, 'repeater_')) {
                         $repeaterName = str_replace('repeater_', '', $entityTemplate->name);
                         if ($page->$repeaterName) {
                             $relevantPrompts[$index] = $promptMatrixEntity;
-                            break; // Found a matching repeater, no need to check others
+                            break;
+                        }
+                    } elseif (str_starts_with($entityTemplate->name, 'rockpagebuilderblock-')) {
+                        // RPB stores blocks centrally, not as direct children.
+                        // Check the page's RPB fields for any blocks of this template.
+                        $found = false;
+                        foreach ($page->template->fields as $pageField) {
+                            if ($found) break;
+                            if (strpos(get_class($pageField->type), 'RockPageBuilder') === false) continue;
+                            $value = $page->get($pageField->name);
+                            if (!$value || !is_iterable($value)) continue;
+                            foreach ($value as $block) {
+                                if ($block instanceof Page && $block->template->id == $entityTemplate->id) {
+                                    $found = true;
+                                    break;
+                                }
+                            }
+                        }
+                        if ($found) {
+                            $relevantPrompts[$index] = $promptMatrixEntity;
+                            break;
                         }
                     }
                 }
@@ -220,11 +254,23 @@ class PromptAIHelper {
      * @return array ['parentPage' => Page, 'repeaterItem' => Page|null]
      */
     public static function getRepeaterContext(Page $page): array {
-        $isRepeater = (strpos($page->template->name, 'repeater_') === 0);
+        if (strpos($page->template->name, 'repeater_') === 0) {
+            return [
+                'parentPage' => $page->getForPage(),
+                'repeaterItem' => $page,
+            ];
+        }
+
+        if (strpos($page->template->name, 'rockpagebuilderblock-') === 0) {
+            return [
+                'parentPage' => $page->parent,
+                'repeaterItem' => $page,
+            ];
+        }
 
         return [
-            'parentPage' => $isRepeater ? $page->getForPage() : $page,
-            'repeaterItem' => $isRepeater ? $page : null,
+            'parentPage' => $page,
+            'repeaterItem' => null,
         ];
     }
 

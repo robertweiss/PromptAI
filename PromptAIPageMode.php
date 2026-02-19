@@ -48,12 +48,9 @@ class PromptAIPageMode extends Wire {
         }
 
         // Check if there are relevant page mode prompts for this page
-        $relevantPrompts = [];
-        foreach ($pageModePrompts as $index => $promptEntity) {
-            if (PromptAIHelper::templateMatches($promptEntity->templates, $page->template->id)) {
-                $relevantPrompts[$index] = $promptEntity;
-            }
-        }
+        // Uses getRelevantPrompts which handles direct matches, repeaters, and RPB blocks
+        $allRelevantPrompts = PromptAIHelper::getRelevantPrompts($page, $pageModePrompts);
+        $relevantPrompts = array_filter($allRelevantPrompts, fn($p) => $p->mode === 'page');
 
         if (count($relevantPrompts) === 0) {
             return;
@@ -130,13 +127,26 @@ class PromptAIPageMode extends Wire {
                 continue;
             }
 
-            // Check template match
-            if (!PromptAIHelper::templateMatches($promptMatrixEntity->templates, $page->template->id)) {
-                continue;
+            $noTemplateRestriction = empty($promptMatrixEntity->templates);
+
+            // Direct template match (or no restriction) — process the page itself
+            if ($noTemplateRestriction || PromptAIHelper::templateMatches($promptMatrixEntity->templates, $page->template->id)) {
+                $this->processPromptFields($page, $promptMatrixEntity);
             }
 
-            // Process all fields in this prompt's fields array
-            $this->processPromptFields($page, $promptMatrixEntity);
+            // RPB block processing
+            if ($noTemplateRestriction) {
+                // No template restriction — scan all RPB blocks on the page
+                $this->processRpbBlocks($page, null, $promptMatrixEntity);
+            } elseif (is_array($promptMatrixEntity->templates)) {
+                // Specific templates — only process matching RPB block templates
+                foreach ($promptMatrixEntity->templates as $templateId) {
+                    $entityTemplate = $this->wire('templates')->get($templateId);
+                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'rockpagebuilderblock-')) {
+                        $this->processRpbBlocks($page, $entityTemplate, $promptMatrixEntity);
+                    }
+                }
+            }
         }
     }
 
@@ -157,13 +167,56 @@ class PromptAIPageMode extends Wire {
             return;
         }
 
-        // Check template match
-        if (!PromptAIHelper::templateMatches($promptMatrixEntity->templates, $page->template->id)) {
-            return;
+        $noTemplateRestriction = empty($promptMatrixEntity->templates);
+
+        // Direct template match (or no restriction) — process the page itself
+        if ($noTemplateRestriction || PromptAIHelper::templateMatches($promptMatrixEntity->templates, $page->template->id)) {
+            $this->processPromptFields($page, $promptMatrixEntity);
         }
 
-        // Process all fields in this prompt's fields array
-        $this->processPromptFields($page, $promptMatrixEntity);
+        // RPB block processing
+        if ($noTemplateRestriction) {
+            // No template restriction — scan all RPB blocks on the page
+            $this->processRpbBlocks($page, null, $promptMatrixEntity);
+        } elseif (is_array($promptMatrixEntity->templates)) {
+            // Specific templates — only process matching RPB block templates
+            foreach ($promptMatrixEntity->templates as $templateId) {
+                $entityTemplate = $this->wire('templates')->get($templateId);
+                if ($entityTemplate && str_starts_with($entityTemplate->name, 'rockpagebuilderblock-')) {
+                    $this->processRpbBlocks($page, $entityTemplate, $promptMatrixEntity);
+                }
+            }
+        }
+    }
+
+    /**
+     * Find and process RPB block pages for a page.
+     *
+     * RPB stores blocks centrally (not as direct children of the page), so we
+     * iterate the page's own fields, targeting RPB fieldtypes by class name,
+     * and process blocks of the target template.
+     *
+     * @param Page $page The page being edited
+     * @param Template|null $blockTemplate Specific RPB block template to process, or null for all RPB blocks
+     * @param PromptMatrixEntity $promptMatrixEntity The prompt configuration
+     */
+    private function processRpbBlocks(Page $page, ?Template $blockTemplate, PromptMatrixEntity $promptMatrixEntity): void {
+        // Reload the page fresh from DB — after Pages::saved, RPB may have cleared the
+        // in-memory FieldData, making $page->rpbField return an empty collection.
+        $freshPage = $this->wire('pages')->get($page->id);
+        $freshPage->of(false);
+        foreach ($freshPage->template->fields as $field) {
+            // Only process fields whose type belongs to RockPageBuilder
+            if (strpos(get_class($field->type), 'RockPageBuilder') === false) continue;
+            $value = $freshPage->get($field->name);
+            if (!$value || !is_iterable($value)) continue;
+            foreach ($value as $block) {
+                if (!($block instanceof Page)) continue;
+                // If blockTemplate is specified, only process matching blocks
+                if ($blockTemplate !== null && $block->template->id !== $blockTemplate->id) continue;
+                $this->processPromptFields($block, $promptMatrixEntity);
+            }
+        }
     }
 
     /**

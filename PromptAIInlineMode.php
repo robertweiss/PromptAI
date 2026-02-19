@@ -104,12 +104,37 @@ class PromptAIInlineMode extends Wire {
         $ajaxUrl = $this->wire('config')->urls->admin . 'setup/prompt-ai/?action=inline_process';
         $streamUrl = $this->wire('config')->urls->admin . 'setup/prompt-ai/?action=inline_process_stream';
 
+        // Per-prompt template/field arrays for client-side RPB matching
+        $promptTemplateMap = [];
+        $promptFieldMap = [];
+        foreach ($this->promptMatrix as $index => $promptEntity) {
+            if ($promptEntity->mode !== 'inline') continue;
+            $promptTemplateMap[$index] = $promptEntity->templates; // null = all
+            $promptFieldMap[$index] = $promptEntity->fields ?? [];
+        }
+
+        // field ID → field name
+        $fieldIdToName = [];
+        foreach ($this->wire('fields') as $field) {
+            $fieldIdToName[$field->id] = $field->name;
+        }
+
+        // template name → template ID (for RPB data-tpl attribute lookup)
+        $templateNameToId = [];
+        foreach ($this->wire('templates') as $template) {
+            $templateNameToId[$template->name] = $template->id;
+        }
+
         $this->wire('config')->js('PromptAIInlineMode', [
             'prompts' => $prompts,
             'ajaxUrl' => $ajaxUrl,
             'streamUrl' => $streamUrl,
             'pageId' => $this->wire('input')->get->int('id'),
             'useNativeButtons' => true,
+            'promptTemplateMap' => $promptTemplateMap,
+            'promptFieldMap' => $promptFieldMap,
+            'fieldIdToName' => $fieldIdToName,
+            'templateNameToId' => $templateNameToId,
         ]);
 
         // Add CSS and JavaScript files

@@ -18,7 +18,11 @@
         ajaxUrl: pwConfig.ajaxUrl || '',
         streamUrl: pwConfig.streamUrl || '',
         pageId: pwConfig.pageId || 0,
-        useNativeButtons: pwConfig.useNativeButtons || false
+        useNativeButtons: pwConfig.useNativeButtons || false,
+        promptTemplateMap: pwConfig.promptTemplateMap || {},
+        promptFieldMap: pwConfig.promptFieldMap || {},
+        fieldIdToName: pwConfig.fieldIdToName || {},
+        templateNameToId: pwConfig.templateNameToId || {}
     };
 
     /**
@@ -84,8 +88,8 @@
         }
 
         // Get content from field - check if it's TinyMCE
-        let content = actualField.value;
         const isTinyMCE = actualField.classList.contains('InputfieldTinyMCEEditor');
+        let content = isTinyMCE ? (actualField.innerHTML || '') : (actualField.value || '');
 
         if (isTinyMCE && typeof tinymce !== 'undefined' && actualField.id) {
             const editor = tinymce.get(actualField.id);
@@ -105,12 +109,15 @@
         let repeaterItemId = null;
         let subfieldName = null;
 
+        // Resolve field name: .name is undefined on div elements, use getAttribute as fallback
+        const actualFieldName = actualField.name || actualField.getAttribute('name') || '';
+
         // Parse field name to detect image/file fields
         // Pattern: {subfield}{langid?}_{fieldname}{_repeaterXXXX?}_{hash}
         // Hash is always 32-char hex at the end.
         // Subfield names can contain underscores (alt_text, custom_field).
         // Strategy: match hash, then extract fieldname as last segment before hash.
-        const hashMatch = actualField.name.match(/^(.+)_([a-f0-9]{32})$/);
+        const hashMatch = actualFieldName.match(/^(.+)_([a-f0-9]{32})$/);
         const fieldNameMatch = hashMatch ? true : false;
 
         if (fieldNameMatch) {
@@ -124,16 +131,39 @@
             if (repeaterSuffixMatch) {
                 // Remove _repeaterXXXX to get ..._fieldname
                 const beforeRepeater = prefix.substring(0, prefix.length - repeaterSuffixMatch[0].length);
-                const lastUnderscore = beforeRepeater.lastIndexOf('_');
-                if (lastUnderscore !== -1) {
-                    fullFieldName = beforeRepeater.substring(lastUnderscore + 1);
-                    const beforeField = beforeRepeater.substring(0, lastUnderscore);
-                    subfieldName = beforeField.replace(/\d+$/, ''); // strip lang suffix
+
+                // Try suffix-matching against known field names first (handles multi-underscore
+                // names like block_images_images where lastIndexOf('_') gives wrong result)
+                const fieldNameToIdMap = getFieldNameToId();
+                let foundFieldName = null;
+                let foundSubfield = null;
+                Object.keys(fieldNameToIdMap).forEach(function(name) {
+                    if (foundFieldName !== null && name.length <= foundFieldName.length) return;
+                    if (beforeRepeater === name) {
+                        foundFieldName = name;
+                        foundSubfield = '';
+                    } else if (beforeRepeater.endsWith('_' + name)) {
+                        foundFieldName = name;
+                        foundSubfield = beforeRepeater.substring(0, beforeRepeater.length - name.length - 1)
+                                         .replace(/\d+$/, '');
+                    }
+                });
+
+                if (foundFieldName) {
+                    fullFieldName = foundFieldName + repeaterSuffixMatch[0];
+                    subfieldName = foundSubfield || null;
                 } else {
-                    fullFieldName = beforeRepeater;
+                    // Fallback: last underscore-separated segment
+                    const lastUnderscore = beforeRepeater.lastIndexOf('_');
+                    if (lastUnderscore !== -1) {
+                        fullFieldName = beforeRepeater.substring(lastUnderscore + 1);
+                        const beforeField = beforeRepeater.substring(0, lastUnderscore);
+                        subfieldName = beforeField.replace(/\d+$/, ''); // strip lang suffix
+                    } else {
+                        fullFieldName = beforeRepeater;
+                    }
+                    fullFieldName = fullFieldName + repeaterSuffixMatch[0];
                 }
-                // Re-compose fullFieldName with repeater suffix for repeater detection below
-                fullFieldName = fullFieldName + repeaterSuffixMatch[0];
             } else {
                 // No repeater: last underscore-separated segment is fieldname
                 const lastUnderscorePos = prefix.lastIndexOf('_');
@@ -197,7 +227,7 @@
         } else {
             // Not a file field - check if it's a text field in a repeater
             // Pattern: fieldname_repeaterID or fieldname_langID_repeaterID
-            const textRepeaterMatch = actualField.name.match(/^(.+?)_repeater(\d+)$/);
+            const textRepeaterMatch = actualFieldName.match(/^(.+?)_repeater(\d+)$/);
             if (textRepeaterMatch) {
                 repeaterItemId = parseInt(textRepeaterMatch[2], 10);
             }
@@ -260,12 +290,21 @@
                 if (editor) {
                     editor.setContent(text);
                     if (isFinal) editor.fire('change');
-                    setTimeout(function() {
-                        scrollIframeDocToBottom(editor.getDoc());
-                    }, 10);
+                    // Inline TinyMCE has no iframe — editor.getDoc() returns the main document,
+                    // so skipping the scroll avoids scrolling the entire page to the bottom.
+                    if (!editor.inline) {
+                        setTimeout(function() {
+                            scrollIframeDocToBottom(editor.getDoc());
+                        }, 10);
+                    }
                 } else {
-                    actualField.value = text;
-                    actualField.scrollTop = actualField.scrollHeight;
+                    // Fallback: inline TinyMCE div uses innerHTML, textarea/input uses value
+                    if (actualField.tagName === 'DIV') {
+                        actualField.innerHTML = text;
+                    } else {
+                        actualField.value = text;
+                        actualField.scrollTop = actualField.scrollHeight;
+                    }
                 }
             } else if (isCKEditor) {
                 const editor = CKEDITOR.instances[actualField.id];
@@ -427,7 +466,11 @@
                         editor.setContent(data.result);
                         editor.fire('change');
                     } else {
-                        actualField.value = data.result;
+                        if (actualField.tagName === 'DIV') {
+                            actualField.innerHTML = data.result;
+                        } else {
+                            actualField.value = data.result;
+                        }
                     }
                 } else if (actualField.classList.contains('InputfieldCKEditorNormal') && typeof CKEDITOR !== 'undefined' && actualField.id) {
                     const editor = CKEDITOR.instances[actualField.id];
@@ -474,6 +517,194 @@
         }
 
         return null;
+    }
+
+    // Lazy reverse map: field name → field ID
+    var _fieldNameToId = null;
+    function getFieldNameToId() {
+        if (_fieldNameToId !== null) return _fieldNameToId;
+        _fieldNameToId = {};
+        Object.keys(config.fieldIdToName).forEach(function(id) {
+            _fieldNameToId[config.fieldIdToName[id]] = parseInt(id, 10);
+        });
+        return _fieldNameToId;
+    }
+
+    /**
+     * Strip _repeaterXXXX suffix from RPB field input names
+     */
+    function extractRpbFieldName(inputName) {
+        var m = inputName.match(/^(.+?)_repeater\d+$/);
+        return m ? m[1] : inputName;
+    }
+
+    /**
+     * Parse a file/image subfield input name within a repeater or RPB block.
+     * Pattern: {subfield}_{fieldname}_repeater{id}_{hash}
+     *
+     * Uses known field names (config.fieldIdToName) to resolve the field name,
+     * since both subfield and field name can contain underscores (e.g., alt_text,
+     * block_images_images). The longest matching known field name wins.
+     *
+     * Returns { fieldName, fieldId, subfield, repeaterId } or null if no match.
+     */
+    function parseSubfieldInputName(inputName) {
+        var hashMatch = inputName.match(/^(.+)_([a-f0-9]{32})$/i);
+        if (!hashMatch) return null;
+
+        var prefix = hashMatch[1];
+        var repeaterMatch = prefix.match(/_repeater(\d+)$/);
+        if (!repeaterMatch) return null;
+
+        var repeaterId = parseInt(repeaterMatch[1], 10);
+        var beforeRepeater = prefix.substring(0, prefix.length - repeaterMatch[0].length);
+        // e.g., 'description_block_images_images' or 'alt_text_images'
+
+        // Find field name by suffix-matching known field names (prefer longest match)
+        var fieldNameToId = getFieldNameToId();
+        var bestFieldName = null;
+        var bestSubfield = null;
+
+        Object.keys(fieldNameToId).forEach(function(name) {
+            if (bestFieldName !== null && name.length <= bestFieldName.length) return;
+            if (beforeRepeater === name) {
+                bestFieldName = name;
+                bestSubfield = '';
+            } else if (beforeRepeater.endsWith('_' + name)) {
+                bestFieldName = name;
+                bestSubfield = beforeRepeater.substring(0, beforeRepeater.length - name.length - 1)
+                                 .replace(/\d+$/, ''); // strip lang ID suffix
+            }
+        });
+
+        if (!bestFieldName) return null;
+
+        return {
+            fieldName: bestFieldName,
+            fieldId: fieldNameToId[bestFieldName],
+            subfield: bestSubfield,
+            repeaterId: repeaterId
+        };
+    }
+
+    /**
+     * Get matching prompt indices for a file/image subfield input inside an .rpb-item.
+     * Also checks that the prompt's targetSubfield matches the input's subfield.
+     */
+    function getRpbSubfieldPromptIndices(inputName, tplId) {
+        var parsed = parseSubfieldInputName(inputName);
+        if (!parsed || !parsed.fieldId) return [];
+
+        var indices = [];
+        Object.keys(config.prompts).forEach(function(idxStr) {
+            var idx = parseInt(idxStr, 10);
+            var fieldIds = config.promptFieldMap[idx];
+            if (!fieldIds || fieldIds.indexOf(parsed.fieldId) === -1) return;
+
+            // Template check — null/undefined/empty array = all templates
+            var tplIds = config.promptTemplateMap[idx];
+            if (tplIds !== null && tplIds !== undefined && tplIds.length > 0) {
+                if (tplIds.indexOf(tplId) === -1) return;
+            }
+
+            // Subfield must match prompt's targetSubfield
+            var prompt = config.prompts[idx];
+            var targetSubfield = (prompt && prompt.targetSubfield) ? prompt.targetSubfield : 'description';
+            if (parsed.subfield !== targetSubfield) return;
+
+            indices.push(idx);
+        });
+        return indices;
+    }
+
+    /**
+     * Get matching prompt indices for an input inside an .rpb-item
+     */
+    function getRpbPromptIndices(input) {
+        var rpbItem = input.closest('.rpb-item');
+        if (!rpbItem) return [];
+        var tplName = rpbItem.getAttribute('data-tpl');
+        if (!tplName) return [];
+        var tplId = config.templateNameToId[tplName];
+        if (!tplId) return [];
+
+        var name = input.name || input.getAttribute('name') || '';
+        if (!name) return [];
+
+        // Route to subfield handler when a 32-char hash is at the end (file/image description inputs)
+        if (/^.+_[a-f0-9]{32}$/i.test(name)) {
+            return getRpbSubfieldPromptIndices(name, tplId);
+        }
+
+        // Regular text input: field name is last segment before _repeater\d+
+        var rawField = extractRpbFieldName(name);
+        var fieldId = getFieldNameToId()[rawField];
+        if (!fieldId) return [];
+
+        var indices = [];
+        Object.keys(config.prompts).forEach(function(idxStr) {
+            var idx = parseInt(idxStr, 10);
+            var fieldIds = config.promptFieldMap[idx];
+            if (!fieldIds || fieldIds.indexOf(fieldId) === -1) return;
+            // null/undefined/empty array = all templates
+            var tplIds = config.promptTemplateMap[idx];
+            if (tplIds !== null && tplIds !== undefined && tplIds.length > 0) {
+                if (tplIds.indexOf(tplId) === -1) return;
+            }
+            indices.push(idx);
+        });
+        return indices;
+    }
+
+    /**
+     * Add buttons to all matching inputs within one .rpb-item
+     */
+    function addButtonsToRpbItem(rpbItem) {
+        // Also select div.InputfieldTinyMCEEditor for inline TinyMCE blocks
+        var inputs = rpbItem.querySelectorAll('input[type="text"], textarea, div.InputfieldTinyMCEEditor');
+        inputs.forEach(function(input) {
+            if (!input.name || input.classList.contains('rpb-data')) return;
+            if (input.name.startsWith('sort_') || input.name.startsWith('delete_') || input.name.startsWith('rename_')) return;
+            // Skip already processed
+            if (input.nextElementSibling && input.nextElementSibling.classList.contains('promptai-container')) return;
+
+            var indices = getRpbPromptIndices(input);
+            if (indices.length === 0) return;
+
+            // Classic TinyMCE (textarea): use visible wrapper
+            if (input.tagName === 'TEXTAREA' && input.classList.contains('InputfieldTinyMCEEditor')) {
+                var wrapper = input.parentNode.querySelector('.mce-tinymce, .tox-tinymce');
+                if (wrapper) createPromptsForInput(wrapper, indices);
+                return; // else: MutationObserver will retry when editor initializes
+            }
+            // Inline TinyMCE div or regular input: attach directly
+            createPromptsForInput(input, indices);
+        });
+    }
+
+    /**
+     * Add buttons to all .rpb-item elements in the DOM
+     */
+    function addButtonsToAllRpbItems() {
+        document.querySelectorAll('.rpb-item').forEach(function(item) {
+            addButtonsToRpbItem(item);
+        });
+    }
+
+    /**
+     * Set up jQuery event listeners for RPB lifecycle events
+     */
+    function setupRpbListeners() {
+        if (typeof $ === 'undefined') return;
+        // Fires once per RPB field after initial render
+        $(document).on('rpb-init', '.InputfieldRockPageBuilder', function(e) {
+            $(e.target).find('.rpb-item').each(function() { addButtonsToRpbItem(this); });
+        });
+        // Fires on each .Inputfield inside a newly added block
+        $(document).on('reloaded', '.rpb-item .Inputfield', function(e) {
+            var item = $(e.target).closest('.rpb-item')[0];
+            if (item) setTimeout(function() { addButtonsToRpbItem(item); }, 200);
+        });
     }
 
     /**
@@ -549,8 +780,7 @@
             // Check if this is a TinyMCE field
             const tinymceTextarea = textField.querySelector('textarea.InputfieldTinyMCEEditor');
             if (tinymceTextarea) {
-                // TinyMCE field - find the visible editor wrapper
-                // TinyMCE creates a wrapper after the textarea, we'll add the button after that wrapper
+                // TinyMCE classic mode - find the visible editor wrapper (.tox-tinymce or .mce-tinymce)
                 const editorWrapper = textField.querySelector('.mce-tinymce, .tox-tinymce');
                 if (editorWrapper) {
                     input = editorWrapper;
@@ -559,8 +789,14 @@
                     return;
                 }
             } else {
-                // Regular input or textarea
-                input = textField.querySelector('input[type="text"], textarea:not(.InputfieldTinyMCEEditor)');
+                // Check for inline TinyMCE (rendered as a div with name attribute, no hidden textarea)
+                const tinymceDivInline = textField.querySelector('div.InputfieldTinyMCEEditor');
+                if (tinymceDivInline) {
+                    input = tinymceDivInline;
+                } else {
+                    // Regular input or textarea
+                    input = textField.querySelector('input[type="text"], textarea:not(.InputfieldTinyMCEEditor)');
+                }
             }
 
             if (!input) return;
@@ -650,12 +886,16 @@
         // Add buttons to file field description inputs
         addButtonsToFileFields();
 
+        // Add buttons to RPB block fields
+        addButtonsToAllRpbItems();
+
         // Re-add buttons when fields are added dynamically (e.g., new file uploaded, repeater added)
         const observer = new MutationObserver(function(mutations) {
             mutations.forEach(function(mutation) {
                 if (mutation.addedNodes.length) {
                     addButtonsToTextFields();
                     addButtonsToFileFields();
+                    addButtonsToAllRpbItems();
                 }
             });
         });
@@ -664,6 +904,9 @@
         if (contentBody) {
             observer.observe(contentBody, { childList: true, subtree: true });
         }
+
+        // Set up RPB lifecycle event listeners
+        setupRpbListeners();
     }
 
     // Start when DOM is ready
