@@ -135,23 +135,11 @@
                 // Try suffix-matching against known field names first (handles multi-underscore
                 // names like block_images_images where lastIndexOf('_') gives wrong result)
                 const fieldNameToIdMap = getFieldNameToId();
-                let foundFieldName = null;
-                let foundSubfield = null;
-                Object.keys(fieldNameToIdMap).forEach(function(name) {
-                    if (foundFieldName !== null && name.length <= foundFieldName.length) return;
-                    if (beforeRepeater === name) {
-                        foundFieldName = name;
-                        foundSubfield = '';
-                    } else if (beforeRepeater.endsWith('_' + name)) {
-                        foundFieldName = name;
-                        foundSubfield = beforeRepeater.substring(0, beforeRepeater.length - name.length - 1)
-                                         .replace(/\d+$/, '');
-                    }
-                });
+                const match = findBestFieldNameMatch(beforeRepeater, fieldNameToIdMap);
 
-                if (foundFieldName) {
-                    fullFieldName = foundFieldName + repeaterSuffixMatch[0];
-                    subfieldName = foundSubfield || null;
+                if (match) {
+                    fullFieldName = match.fieldName + repeaterSuffixMatch[0];
+                    subfieldName = match.subfield || null;
                 } else {
                     // Fallback: last underscore-separated segment
                     const lastUnderscore = beforeRepeater.lastIndexOf('_');
@@ -519,6 +507,31 @@
         return null;
     }
 
+    /**
+     * Find the best (longest) field name that matches `beforeRepeater`.
+     * `beforeRepeater` is either exactly the field name or ends with `_{fieldName}`,
+     * where everything before the field name is the subfield (e.g. "alt_text").
+     *
+     * Returns { fieldName, subfield } or null when no match is found.
+     */
+    function findBestFieldNameMatch(beforeRepeater, fieldNameToId) {
+        var foundName = null;
+        var foundSubfield = null;
+        Object.keys(fieldNameToId).forEach(function(name) {
+            if (foundName !== null && name.length <= foundName.length) return;
+            if (beforeRepeater === name) {
+                foundName = name;
+                foundSubfield = '';
+            } else if (beforeRepeater.endsWith('_' + name)) {
+                foundName = name;
+                foundSubfield = beforeRepeater.substring(0, beforeRepeater.length - name.length - 1)
+                                 .replace(/\d+$/, ''); // strip trailing lang-ID digits
+            }
+        });
+        if (!foundName) return null;
+        return { fieldName: foundName, subfield: foundSubfield };
+    }
+
     // Lazy reverse map: field name → field ID
     var _fieldNameToId = null;
     function getFieldNameToId() {
@@ -562,27 +575,14 @@
 
         // Find field name by suffix-matching known field names (prefer longest match)
         var fieldNameToId = getFieldNameToId();
-        var bestFieldName = null;
-        var bestSubfield = null;
+        var bestMatch = findBestFieldNameMatch(beforeRepeater, fieldNameToId);
 
-        Object.keys(fieldNameToId).forEach(function(name) {
-            if (bestFieldName !== null && name.length <= bestFieldName.length) return;
-            if (beforeRepeater === name) {
-                bestFieldName = name;
-                bestSubfield = '';
-            } else if (beforeRepeater.endsWith('_' + name)) {
-                bestFieldName = name;
-                bestSubfield = beforeRepeater.substring(0, beforeRepeater.length - name.length - 1)
-                                 .replace(/\d+$/, ''); // strip lang ID suffix
-            }
-        });
-
-        if (!bestFieldName) return null;
+        if (!bestMatch) return null;
 
         return {
-            fieldName: bestFieldName,
-            fieldId: fieldNameToId[bestFieldName],
-            subfield: bestSubfield,
+            fieldName: bestMatch.fieldName,
+            fieldId: fieldNameToId[bestMatch.fieldName],
+            subfield: bestMatch.subfield,
             repeaterId: repeaterId
         };
     }

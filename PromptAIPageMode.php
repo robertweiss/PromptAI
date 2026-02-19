@@ -126,27 +126,7 @@ class PromptAIPageMode extends Wire {
             if ($promptMatrixEntity->mode !== 'page') {
                 continue;
             }
-
-            $noTemplateRestriction = empty($promptMatrixEntity->templates);
-
-            // Direct template match (or no restriction) — process the page itself
-            if ($noTemplateRestriction || PromptAIHelper::templateMatches($promptMatrixEntity->templates, $page->template->id)) {
-                $this->processPromptFields($page, $promptMatrixEntity);
-            }
-
-            // RPB block processing
-            if ($noTemplateRestriction) {
-                // No template restriction — scan all RPB blocks on the page
-                $this->processRpbBlocks($page, null, $promptMatrixEntity);
-            } elseif (is_array($promptMatrixEntity->templates)) {
-                // Specific templates — only process matching RPB block templates
-                foreach ($promptMatrixEntity->templates as $templateId) {
-                    $entityTemplate = $this->wire('templates')->get($templateId);
-                    if ($entityTemplate && str_starts_with($entityTemplate->name, 'rockpagebuilderblock-')) {
-                        $this->processRpbBlocks($page, $entityTemplate, $promptMatrixEntity);
-                    }
-                }
-            }
+            $this->dispatchPrompt($page, $promptMatrixEntity);
         }
     }
 
@@ -167,6 +147,14 @@ class PromptAIPageMode extends Wire {
             return;
         }
 
+        $this->dispatchPrompt($page, $promptMatrixEntity);
+    }
+
+    /**
+     * Dispatch a single prompt: process the page's own fields (direct match) and
+     * any RPB block pages that match the prompt's template configuration.
+     */
+    private function dispatchPrompt(Page $page, PromptMatrixEntity $promptMatrixEntity): void {
         $noTemplateRestriction = empty($promptMatrixEntity->templates);
 
         // Direct template match (or no restriction) — process the page itself
