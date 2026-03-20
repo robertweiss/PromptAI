@@ -186,12 +186,22 @@ class PromptAIConfig extends ModuleConfig {
         }
 
         if (wire('session')->get('testSettings')) {
+            // Run the test only once; cache result in session for the render pass
+            $testResult = wire('session')->get('testSettingsResult');
+            if ($testResult === null) {
+                $testResult = $this->requestTest();
+                wire('session')->set('testSettingsResult', $testResult);
+            } else {
+                wire('session')->remove('testSettings');
+                wire('session')->remove('testSettingsResult');
+            }
+
             $inputfields->add(
                 $this->buildInputField('InputfieldMarkup', [
                     'name+id' => 'debug_log',
                     'label' => $this->_('Test results'),
                     'columnWidth' => 100,
-                    'value' => $this->requestTest(),
+                    'value' => $testResult,
                 ])
             );
 
@@ -199,10 +209,6 @@ class PromptAIConfig extends ModuleConfig {
             $moduleConfig = wire('modules')->getConfig('PromptAI');
             $moduleConfig['testSettings'] = 0;
             wire('modules')->saveConfig('PromptAI', $moduleConfig);
-
-            if (!wire('input')->post('testSettings') && wire('session')->get('testSettings')) {
-                wire('session')->remove('testSettings');
-            }
         }
 
         return $inputfields;

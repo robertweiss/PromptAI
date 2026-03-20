@@ -358,7 +358,13 @@ class PromptAI extends Process implements Module {
         }
 
         $request = __('This is a test for the AI. Do you hear me?');
-        $response = $this->chat($request, false);
+        try {
+            $response = $this->chat($request, false);
+        } catch (\Exception $e) {
+            $this->error($e->getMessage());
+
+            return json_encode($e->getMessage());
+        }
 
         return json_encode([
                                'request' => $request,
